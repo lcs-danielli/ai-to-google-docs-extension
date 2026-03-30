@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "AI Math to Google Docs",
+  "version": "3.1.0",
+  "description": "One-click export ChatGPT, Gemini & Claude responses with editable math equations directly to Google Docs",
+  "permissions": ["activeTab", "identity"],
+  "host_permissions": [
+    "https://www.googleapis.com/*"
+  ],
+  "oauth2": {
+    "client_id": "39131322719-ndpbenl2i02127q2kovno76vd6b9ap3j.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*", "https://gemini.google.com/*", "https://claude.ai/*"],
+      "js": ["converter.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
