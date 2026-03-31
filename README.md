@@ -35,3 +35,7 @@ Chrome Extension API
 <img width="373" height="85" alt="image" src="https://github.com/user-attachments/assets/b74e0e3f-415d-4437-b2ce-b34139d7f26e" />
 <img width="378" height="100" alt="image" src="https://github.com/user-attachments/assets/524279d8-e112-49fc-971b-be07bcd9ea67" />
 
+## Author
+Daniel Li
+
+GitHub: https://github.com/lcs-danielli
