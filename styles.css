@@ -1,0 +1,33 @@
+/* Export button - inline with ChatGPT's action buttons */
+.cgd-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  margin-left: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cgd-export-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.cgd-export-btn:active {
+  background: rgba(59, 130, 246, 0.25);
+  transform: scale(0.97);
+}
+
+.cgd-export-btn svg {
+  flex-shrink: 0;
+}
+
+/* No floating button */
