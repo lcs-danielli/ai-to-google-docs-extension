@@ -449,48 +449,51 @@
   // ═══════════════════════════════════════════════════════════════
 
   function addClaudeButtons() {
-    // Find all Copy buttons (aria-label="Copy")
     const copyButtons = document.querySelectorAll('button[aria-label="Copy"]');
 
     for (const copyBtn of copyButtons) {
-      // The grandparent is the action bar: "text-text-300 flex items-stretch justify-between"
-      const actionBar = copyBtn.closest('.text-text-300');
-      if (!actionBar || actionBar.querySelector('.' + BUTTON_CLASS)) continue;
+      // Exclude code-block copy buttons — they live inside <pre> or a code toolbar
+      if (copyBtn.closest('pre') || copyBtn.closest('[data-code-block]') || copyBtn.closest('.code-block')) continue;
 
-      // Walk up from the action bar to find the full response
-      // Claude structure: response container > content area > action bar
-      // We need to find the div that contains BOTH the content and the action bar
+      // Find the message-level action bar (try multiple class names Claude has used)
+      const actionBar = copyBtn.closest('.text-text-300') ||
+                        copyBtn.closest('[class*="message-actions"]') ||
+                        copyBtn.closest('[class*="action-bar"]') ||
+                        copyBtn.parentElement?.parentElement;
+
+      if (!actionBar) continue;
+      if (actionBar.querySelector('.' + BUTTON_CLASS)) continue;
+
+      // Walk up to find the response container (holds both content + action bar)
       let responseContainer = actionBar.parentElement;
-      
-      // Keep walking up until we find the container with the actual response text
-      for (let i = 0; i < 5 && responseContainer; i++) {
-        const hasContent = responseContainer.querySelector('.font-claude-response') ||
-                           responseContainer.querySelector('[class*="font-claude-response-body"]');
+      for (let i = 0; i < 6 && responseContainer; i++) {
+        const hasContent =
+          responseContainer.querySelector('[class*="font-claude-response"]') ||
+          responseContainer.querySelector('[data-is-streaming]') ||
+          responseContainer.querySelector('.prose');
         if (hasContent) break;
         responseContainer = responseContainer.parentElement;
       }
 
       if (!responseContainer) continue;
 
-      // Find the content div - try multiple selectors
-      const contentEl = responseContainer.querySelector('[class*="font-claude-response"]:not(.text-text-300)') ||
-                        responseContainer.querySelector('.contents') ||
-                        responseContainer;
-
       // Skip user messages
-      if (responseContainer.querySelector('.font-user-message')) continue;
+      if (responseContainer.querySelector('[class*="font-user-message"]') ||
+          responseContainer.querySelector('[data-message-author-role="user"]')) continue;
+
+      // Find the content element with multiple fallbacks
+      const contentEl =
+        responseContainer.querySelector('[class*="font-claude-response"]') ||
+        responseContainer.querySelector('.prose') ||
+        responseContainer.querySelector('[data-is-streaming]') ||
+        responseContainer;
 
       const btn = createExportButton();
       btn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
-        // Log what we're exporting for debugging
-        console.log('Claude export - contentEl class:', contentEl.className);
-        console.log('Claude export - contentEl children:', contentEl.children.length);
-        console.log('Claude export - text length:', contentEl.textContent.length);
         exportMessage(contentEl);
       });
 
-      // Insert next to the Copy button's parent (w-fit)
       const copyParent = copyBtn.parentElement;
       if (copyParent) {
         const wrapper = document.createElement('div');
