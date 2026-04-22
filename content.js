@@ -348,7 +348,15 @@
 
   function findChatGPTActionBar(container) {
     const copyBtn = container.querySelector('button[data-testid="copy-turn-action-button"]');
-    if (copyBtn) return copyBtn.parentElement;
+    if (copyBtn) {
+      // Walk up until we find the bar that also contains the three-dots button
+      let bar = copyBtn.parentElement;
+      for (let i = 0; i < 3 && bar; i++) {
+        if (bar.querySelector('button[data-testid*="more"]')) return bar;
+        bar = bar.parentElement;
+      }
+      return copyBtn.parentElement;
+    }
     const allDivs = container.querySelectorAll('div.flex');
     for (const div of allDivs) {
       if (div.querySelectorAll('button').length >= 2 && div.offsetHeight < 50) return div;
@@ -448,7 +456,8 @@
 
   function insertBeforeMoreButton(container, el) {
     const moreBtn = container.querySelector(
-      'button[aria-label*="more" i], button[aria-label*="option" i], button[data-tooltip*="more" i]'
+      'button[aria-label*="more" i], button[aria-label*="option" i], ' +
+      'button[data-tooltip*="more" i], button[data-testid*="more"]'
     );
     if (!moreBtn) { container.appendChild(el); return; }
     let anchor = moreBtn;
