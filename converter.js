@@ -16,8 +16,21 @@ function tokenizeLatex(latex) {
     if ('()[]&'.includes(ch)) { tokens.push({ type: 'TEXT', value: ch }); i++; continue; }
     if (ch === '\\') {
       let cmd = '\\'; i++;
-      if (i < latex.length && /[a-zA-Z]/.test(latex[i])) { while (i < latex.length && /[a-zA-Z]/.test(latex[i])) { cmd += latex[i]; i++; } }
-      else if (i < latex.length) { cmd += latex[i]; i++; }
+      if (i < latex.length && /[a-zA-Z]/.test(latex[i])) {
+        while (i < latex.length && /[a-zA-Z]/.test(latex[i])) { cmd += latex[i]; i++; }
+        if (cmd === '\\begin' && i < latex.length && latex[i] === '{') {
+          i++; // consume {
+          let envName = '';
+          while (i < latex.length && latex[i] !== '}') { envName += latex[i]; i++; }
+          if (i < latex.length) i++; // consume }
+          const endMarker = `\\end{${envName}}`;
+          const endIdx = latex.indexOf(endMarker, i);
+          const content = endIdx >= 0 ? latex.substring(i, endIdx).trim() : latex.substring(i).trim();
+          if (endIdx >= 0) i = endIdx + endMarker.length; else i = latex.length;
+          tokens.push({ type: 'ENV', env: envName, content });
+          continue;
+        }
+      } else if (i < latex.length) { cmd += latex[i]; i++; }
       tokens.push({ type: 'COMMAND', value: cmd }); continue;
     }
     if (/[0-9]/.test(ch)) {
@@ -67,6 +80,13 @@ function parseLatex(tokens) {
   }
   function parseAtom() {
     const t = peek(); if (!t) return {type:'text',value:''};
+    if (t.type==='ENV') {
+      advance();
+      const envRows = t.content.split(/\\\\/)
+        .filter(row => row.trim())
+        .map(row => row.split('&').map(cell => parseLatex(tokenizeLatex(cell.trim()))));
+      return { type: 'matrix', env: t.env, rows: envRows };
+    }
     if (t.type==='COMMAND') { advance(); const cmd=t.value;
       if (SYMBOLS[cmd]!==undefined) return {type:'text',value:SYMBOLS[cmd]};
       if (cmd==='\\frac'||cmd==='\\dfrac'||cmd==='\\tfrac') return {type:'fraction',numerator:parseGroup(),denominator:parseGroup()};
@@ -113,11 +133,29 @@ function astToOmml(node) {
     case'subsup':return`<m:sSubSup><m:sSubSupPr/><m:e>${astToOmml(node.base)}</m:e><m:sub>${astToOmml(node.subscript)}</m:sub><m:sup>${astToOmml(node.superscript)}</m:sup></m:sSubSup>`;
     case'radical':if(node.degree)return`<m:rad><m:radPr/><m:deg>${astToOmml({type:'text',value:node.degree})}</m:deg><m:e>${astToOmml(node.content)}</m:e></m:rad>`;return`<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>${astToOmml(node.content)}</m:e></m:rad>`;
     case'accent':return`<m:acc><m:accPr><m:chr m:val="${escapeXml(node.accent)}"/></m:accPr><m:e>${astToOmml(node.content)}</m:e></m:acc>`;
+    case'matrix':{
+      const DELIMS={pmatrix:['(',')'],bmatrix:['[',']'],vmatrix:['|','|'],Vmatrix:['\u2016','\u2016'],Bmatrix:['{','}'],cases:['{','']};
+      const colCount=Math.max(1,...node.rows.map(r=>r.length));
+      const jc=node.env==='cases'?'left':'center';
+      let mXml=`<m:m><m:mPr><m:mcs><m:mc><m:mcPr><m:count m:val="${colCount}"/><m:mcJc m:val="${jc}"/></m:mcPr></m:mc></m:mcs><m:ctrlPr/></m:mPr>`;
+      for(const row of node.rows){mXml+='<m:mr>';for(const cell of row)mXml+=`<m:e>${astToOmml(cell)}</m:e>`;mXml+='</m:mr>';}
+      mXml+='</m:m>';
+      const d=DELIMS[node.env];
+      if(d)return`<m:d><m:dPr><m:begChr m:val="${escapeXml(d[0])}"/><m:endChr m:val="${escapeXml(d[1])}"/><m:ctrlPr/></m:dPr><m:e>${mXml}</m:e></m:d>`;
+      return mXml;
+    }
     default:return'<m:r><m:t></m:t></m:r>';
   }
 }
 
-function latexToOmml(latex){try{return astToOmml(parseLatex(tokenizeLatex(latex)));}catch(e){return`<m:r><m:t>${escapeXml(latex)}</m:t></m:r>`;}}
+function latexToOmml(latex) {
+  try {
+    return astToOmml(parseLatex(tokenizeLatex(latex)));
+  } catch(e) {
+    console.error('LaTeX parse error:', e.message, '| input:', latex);
+    return `<m:r><m:t>${escapeXml(latex)}</m:t></m:r>`;
+  }
+}
 
 // ── MARKDOWN PARSER ──
 
@@ -438,13 +476,32 @@ function createZip(files){
   const all=[...parts,...cd,eocd];let tl=0;for(const a of all)tl+=a.length;
   const r=new Uint8Array(tl);let p=0;for(const a of all){r.set(a,p);p+=a.length;}return r;
 }
-function crc32(bytes){let t=crc32.t;if(!t){t=crc32.t=new Uint32Array(256);for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c;}}let crc=0xFFFFFFFF;for(let i=0;i<bytes.length;i++)crc=t[(crc^bytes[i])&0xFF]^(crc>>>8);return(crc^0xFFFFFFFF)>>>0;}
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
 
 // ── PUBLIC API ──
 
 function convertChatGPTToDocx(markdownText) {
-  const blocks = parseChatGPTMarkdown(markdownText);
-  const { xml: bodyXml, orderedListCount } = buildDocumentXml(blocks);
+  let blocks, bodyXml, orderedListCount;
+  try {
+    blocks = parseChatGPTMarkdown(markdownText);
+    ({ xml: bodyXml, orderedListCount } = buildDocumentXml(blocks));
+  } catch(e) {
+    console.error('Converter error during parsing/building:', e.message, e);
+    throw e;
+  }
   const files = [
     {name:'[Content_Types].xml',content:CONTENT_TYPES},
     {name:'_rels/.rels',content:ROOT_RELS},
