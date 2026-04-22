@@ -61,6 +61,15 @@ async function handleUpload(docxBase64, filename) {
     bytes[i] = binaryString.charCodeAt(i);
   }
 
+  // 3. Reject files over 5MB (Drive multipart upload limit)
+  const MAX_BYTES = 5 * 1024 * 1024;
+  if (bytes.length > MAX_BYTES) {
+    throw new Error(
+      `Export too large (${(bytes.length / 1024 / 1024).toFixed(1)} MB). ` +
+      'Google Drive multipart uploads are limited to 5 MB. Try exporting a shorter message.'
+    );
+  }
+
   // 3. Upload to Google Drive with conversion to Google Docs format
   const metadata = {
     name: filename.replace('.docx', ''),
@@ -107,7 +116,17 @@ async function handleUpload(docxBase64, filename) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error('Drive API error (' + response.status + '): ' + errText);
+    let reason = '';
+    try { reason = JSON.parse(errText)?.error?.errors?.[0]?.reason || ''; } catch {}
+    if (reason === 'storageQuotaExceeded') {
+      throw new Error('Your Google Drive storage is full. Free up space and try again.');
+    } else if (reason === 'userRateLimitExceeded' || reason === 'rateLimitExceeded') {
+      throw new Error('Google Drive rate limit reached. Please wait a minute and try again.');
+    } else {
+      let msg = '';
+      try { msg = JSON.parse(errText)?.error?.message || errText; } catch { msg = errText; }
+      throw new Error(`Drive API error (${response.status}): ${msg}`);
+    }
   }
 
   const result = await response.json();
