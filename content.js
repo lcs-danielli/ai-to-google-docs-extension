@@ -391,7 +391,13 @@
     // Also try to find responses by looking for the "copy" button in Gemini
     const copyButtons = document.querySelectorAll('button[aria-label="Copy"], button[data-tooltip="Copy"]');
     for (const copyBtn of copyButtons) {
-      const actionBar = copyBtn.parentElement;
+      // Walk up to find the full action bar including three-dots button
+      let actionBar = copyBtn.parentElement;
+      for (let i = 0; i < 3 && actionBar; i++) {
+        const hasMore = actionBar.querySelector('button[aria-label*="more" i], button[data-tooltip*="more" i]');
+        if (hasMore) break;
+        actionBar = actionBar.parentElement;
+      }
       if (!actionBar || actionBar.querySelector('.' + BUTTON_CLASS)) continue;
 
       // Find the associated response content
@@ -417,19 +423,23 @@
   }
 
   function findGeminiActionBar(container) {
-    // Look for button groups containing copy/thumbs
     const buttons = container.querySelectorAll('button');
     for (const btn of buttons) {
       const label = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || '').toLowerCase();
       if (label.includes('copy') || label.includes('share') || label.includes('thumb')) {
+        // Walk up to find the bar that also contains the three-dots / more-options button
+        let bar = btn.parentElement;
+        for (let i = 0; i < 3 && bar; i++) {
+          const hasMore = bar.querySelector('button[aria-label*="more" i], button[aria-label*="option" i], button[data-tooltip*="more" i]');
+          if (hasMore) return bar;
+          bar = bar.parentElement;
+        }
         return btn.parentElement;
       }
     }
-    // Look for action containers
-    const actionDiv = container.querySelector('.action-buttons') ||
-                      container.querySelector('.response-actions') ||
-                      container.querySelector('[class*="action"]');
-    return actionDiv;
+    return container.querySelector('.action-buttons') ||
+           container.querySelector('.response-actions') ||
+           container.querySelector('[class*="action"]');
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -494,15 +504,10 @@
         exportMessage(contentEl);
       });
 
-      const copyParent = copyBtn.parentElement;
-      if (copyParent) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'w-fit';
-        wrapper.appendChild(btn);
-        copyParent.after(wrapper);
-      } else {
-        actionBar.appendChild(btn);
-      }
+      const wrapper = document.createElement('div');
+      wrapper.className = 'w-fit';
+      wrapper.appendChild(btn);
+      actionBar.appendChild(wrapper);
     }
   }
 
