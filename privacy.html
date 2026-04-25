@@ -5,54 +5,84 @@
 <title>Privacy Policy - AI Chat Exporter for Google Docs</title>
 </head>
 
-<body style="max-width:800px;margin:auto;font-family:Arial;line-height:1.6">
+<body style="max-width:800px;margin:auto;font-family:Arial;line-height:1.6;padding:20px">
 
 <h1>Privacy Policy</h1>
 
-<p><strong>AI Chat Exporter for Google Docs</strong> respects your privacy.</p>
+<p><em>Last updated: April 25, 2026</em></p>
+
+<p><strong>AI Chat Exporter for Google Docs</strong> respects your privacy. This policy explains what information the extension processes, why, and what we do (and don't do) with it.</p>
 
 <h2>Information We Process</h2>
 
-<p>The extension may process:</p>
+<p>The extension processes the following data, all of it locally in your browser:</p>
 
 <ul>
-<li>Website content from AI chat platforms (ChatGPT, Gemini, Claude) that the user chooses to export.</li>
-<li>Authentication information required to connect to the user's Google account through OAuth.</li>
+<li><strong>AI chat content</strong> — text, images, code blocks, tables, and math equations from ChatGPT, Gemini, and Claude responses that you explicitly choose to export.</li>
+<li><strong>Google account authentication</strong> — an OAuth access token issued by Google when you sign in. This token allows the extension to create and update documents in your Google Drive on your behalf.</li>
+<li><strong>User preferences</strong> — your default export mode (single response, full conversation, or selection panel), preferred destination folder, and a record of the last Google Doc associated with each AI conversation. This is stored locally using Chrome's <code>storage</code> API.</li>
+<li><strong>Image data</strong> — when you choose to export a response containing images, the extension fetches the image from its source URL (typically a CDN operated by the AI platform), converts it to PNG format, and embeds it into the resulting Google Doc.</li>
 </ul>
 
 <h2>How We Use Information</h2>
 
-<p>The data is used only to:</p>
+<p>Information is used solely to provide the export functionality:</p>
 
 <ul>
-<li>Read AI chat responses that the user chooses to export</li>
-<li>Create a Google Docs document in the user's Google Drive</li>
-<li>Preserve formatting including supported math equations</li>
+<li>Read the AI chat response you choose to export.</li>
+<li>Create a new Google Doc in your Google Drive, or append content to an existing one.</li>
+<li>Preserve formatting including headings, lists, tables, code blocks, math equations (rendered natively in Google Docs), and embedded images.</li>
+<li>Remember your preferences so the extension behaves consistently between sessions.</li>
 </ul>
 
-<h2>Data Storage & Security</h2>
+<h2>Permissions Explained</h2>
 
-<p>This extension does not store user data on external servers. All processing happens locally in the browser.</p>
+<p>The extension requests the following permissions:</p>
 
-<p>The extension uses the Chrome Identity API to authenticate users with their Google account. <strong>The OAuth token is stored locally within your browser and is never transmitted to any developer-owned or third-party servers.</strong></p>
+<ul>
+<li><strong><code>identity</code></strong> — required for Google OAuth sign-in.</li>
+<li><strong><code>storage</code></strong> — required to remember your preferences locally in your browser.</li>
+<li><strong>Access to <code>chatgpt.com</code>, <code>claude.ai</code>, <code>gemini.google.com</code></strong> — required to read the AI response you choose to export.</li>
+<li><strong>Access to <code>googleapis.com</code> and <code>docs.googleapis.com</code></strong> — required to upload documents to Google Drive and to append text to existing Google Docs.</li>
+<li><strong>Optional access to other websites</strong> — requested only at the moment you export a response containing an image. The extension needs to fetch the image from whichever CDN domain serves it (for example, OpenAI's <code>oaiusercontent.com</code> or Google's <code>googleusercontent.com</code>). This permission is requested per CDN origin via Chrome's native permission dialog and is never requested on install. If you decline, the export continues normally — images are replaced with an "[Image]" placeholder.</li>
+</ul>
+
+<h2>Data Storage &amp; Security</h2>
+
+<p>The extension does not store user data on any external server. All processing — including markdown parsing, document generation, and image conversion — happens entirely in your browser.</p>
+
+<p>The OAuth token issued by Google is stored locally in your browser via Chrome's secure identity API and is never transmitted to any developer-owned or third-party server. You can revoke the extension's Google access at any time by visiting <a href="https://myaccount.google.com/permissions" target="_blank">https://myaccount.google.com/permissions</a>.</p>
+
+<p>User preferences and conversation-to-document mappings are stored locally via Chrome's <code>storage</code> API and remain on your device. They are not synced to any remote server by the extension.</p>
 
 <h2>Google API Limited Use Disclosure</h2>
 
 <p><strong>AI Chat Exporter for Google Docs</strong>'s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy#limited-use" target="_blank">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
+<p>Specifically, data obtained through the Google Drive API and Google Docs API is used solely for the user-facing feature of creating and updating documents the user explicitly chooses to export. It is not used for advertising, transferred to third parties, or accessed by humans, except as required by law.</p>
+
 <h2>Data Sharing</h2>
 
 <p>No user data is sold, rented, or shared with third parties.</p>
 
-<p>Data may be transmitted only to Google services when the user authorizes the extension to create a document in Google Drive.</p>
+<p>Data is transmitted only to:</p>
+
+<ul>
+<li><strong>Google services</strong> — when you authorize the extension to create or update a document in your Google Drive.</li>
+<li><strong>Image CDN domains</strong> — when you export a response containing images and grant permission to fetch from that origin. Only the image URL is requested; no other data is sent.</li>
+</ul>
+
+<h2>Analytics &amp; Tracking</h2>
+
+<p>The extension does not include any analytics, telemetry, error reporting, or usage tracking. No data about how you use the extension leaves your browser.</p>
 
 <h2>Changes</h2>
 
-<p>This policy may be updated if the extension functionality changes.</p>
+<p>This policy may be updated if the extension's functionality changes. Significant changes will be reflected in an updated "Last updated" date at the top of this page.</p>
 
 <h2>Contact</h2>
 
-<p>If you have questions, contact the developer.</p>
+<p>For questions, bug reports, or feature requests, please use the support tab on the <a href="https://chromewebstore.google.com/" target="_blank">Chrome Web Store listing</a>, or open an issue on the project's GitHub repository at <a href="https://github.com/lcs-danielli" target="_blank">https://github.com/lcs-danielli</a>.</p>
 
 </body>
 </html>

@@ -152,7 +152,6 @@ function latexToOmml(latex) {
   try {
     return astToOmml(parseLatex(tokenizeLatex(latex)));
   } catch(e) {
-    console.error('LaTeX parse error:', e.message, '| input:', latex);
     return `<m:r><m:t>${escapeXml(latex)}</m:t></m:r>`;
   }
 }
@@ -191,8 +190,17 @@ function parseChatGPTMarkdown(text) {
       }
       blocks.push({type:'unorderedList',items});continue;
     }
+    if(line.trim().startsWith('|')){
+      const rows=[];
+      while(i<lines.length&&lines[i].trim().startsWith('|')){
+        const row=lines[i].trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+        if(!row.every(c=>/^[-:\s]+$/.test(c)))rows.push(row);
+        i++;
+      }
+      if(rows.length>0)blocks.push({type:'table',rows});continue;
+    }
     const pl=[];
-    while(i<lines.length&&lines[i].trim()!==''&&!lines[i].match(/^#{1,6}\s/)&&!lines[i].trim().startsWith('$$')&&!lines[i].trim().startsWith('\\[')&&!lines[i].trim().startsWith('```')&&!lines[i].match(/^\s*\d+[\.\)]\s/)&&!lines[i].match(/^\s*[-\*\+]\s+/)){pl.push(lines[i]);i++;}
+    while(i<lines.length&&lines[i].trim()!==''&&!lines[i].match(/^#{1,6}\s/)&&!lines[i].trim().startsWith('$$')&&!lines[i].trim().startsWith('\\[')&&!lines[i].trim().startsWith('```')&&!lines[i].match(/^\s*\d+[\.\)]\s/)&&!lines[i].match(/^\s*[-\*\+]\s+/)&&!lines[i].trim().startsWith('|')){pl.push(lines[i]);i++;}
     if(pl.length>0)blocks.push({type:'paragraph',text:pl.join(' ')});
   }
   return blocks;
@@ -224,27 +232,59 @@ function consumeBracketMath(lines,start){const f=lines[start].trim().replace(/^\
 
 // ── DOCX XML BUILDER (with per-list numbering) ──
 
-function buildDocumentXml(blocks) {
+function boldifyRuns(xml) {
+  // Inject <w:b/> into existing run property blocks
+  let r = xml.replace(/<w:rPr>/g, '<w:rPr><w:b/>');
+  // Add run properties to bare <w:r> elements (skip drawing runs)
+  r = r.replace(/<w:r>(?!<w:rPr>|<w:drawing>)/g, '<w:r><w:rPr><w:b/></w:rPr>');
+  return r;
+}
+
+function buildTableXml(rows, imageMap, imageEntries) {
+  if (!rows || rows.length === 0) return '';
+  let tbl = '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>';
+  rows.forEach((row, rowIdx) => {
+    tbl += '<w:tr>';
+    row.forEach(cell => {
+      tbl += '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p><w:pPr><w:spacing w:after="60"/></w:pPr>';
+      if (rowIdx === 0) {
+        const headerInner = buildMixedContent(cell, imageMap, imageEntries);
+        tbl += headerInner ? boldifyRuns(headerInner) : `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${escapeXml(cell)}</w:t></w:r>`;
+      } else {
+        const inner = buildMixedContent(cell, imageMap, imageEntries);
+        tbl += inner || `<w:r><w:t xml:space="preserve">${escapeXml(cell)}</w:t></w:r>`;
+      }
+      tbl += '</w:p></w:tc>';
+    });
+    tbl += '</w:tr>';
+  });
+  tbl += '</w:tbl><w:p/>';
+  return tbl;
+}
+
+function buildDocumentXml(blocks, imageMap) {
   let body='';
-  let orderedListCount = 0; // Track how many ordered lists we've seen
+  let orderedListCount = 0;
+  const imageEntries = [];
 
   for(const block of blocks){
     switch(block.type){
-      case'heading':{const lv=Math.min(block.level,6);body+=`<w:p><w:pPr><w:pStyle w:val="Heading${lv}"/></w:pPr>${buildMixedContent(block.text)}</w:p>`;break;}
+      case'heading':{const lv=Math.min(block.level,6);body+=`<w:p><w:pPr><w:pStyle w:val="Heading${lv}"/></w:pPr>${buildMixedContent(block.text,imageMap,imageEntries)}</w:p>`;break;}
       case'displayMath':{body+=`<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="120"/></w:pPr><m:oMathPara><m:oMath>${latexToOmml(block.latex)}</m:oMath></m:oMathPara></w:p>`;break;}
       case'code':{for(const cl of block.text.split('\n'))body+=`<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(cl)}</w:t></w:r></w:p>`;break;}
       case'orderedList':{
         orderedListCount++;
-        const numId = orderedListCount; // Each list gets its own numId
+        const numId = orderedListCount;
         for(const item of block.items)
-          body+=`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr><w:spacing w:after="80"/></w:pPr>${buildMixedContent(item)}</w:p>`;
+          body+=`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr><w:spacing w:after="80"/></w:pPr>${buildMixedContent(item,imageMap,imageEntries)}</w:p>`;
         break;
       }
-      case'unorderedList':{for(const item of block.items)body+=`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="100"/></w:numPr><w:spacing w:after="80"/></w:pPr>${buildMixedContent(item)}</w:p>`;break;}
-      case'paragraph':{body+=`<w:p><w:pPr><w:spacing w:after="120"/></w:pPr>${buildMixedContent(block.text)}</w:p>`;break;}
+      case'unorderedList':{for(const item of block.items)body+=`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="100"/></w:numPr><w:spacing w:after="80"/></w:pPr>${buildMixedContent(item,imageMap,imageEntries)}</w:p>`;break;}
+      case'paragraph':{body+=`<w:p><w:pPr><w:spacing w:after="120"/></w:pPr>${buildMixedContent(block.text,imageMap,imageEntries)}</w:p>`;break;}
+      case'table':{body+=buildTableXml(block.rows,imageMap,imageEntries);break;}
     }
   }
-  return { xml: body, orderedListCount: orderedListCount };
+  return { xml: body, orderedListCount, imageEntries };
 }
 
 function cleanOrphanMarkers(text) {
@@ -279,7 +319,31 @@ function cleanOrphanMarkers(text) {
   return cleaned;
 }
 
-function buildMixedContent(text) {
+function buildMixedContent(text, imageMap, imageEntries) {
+  if(!text) return '';
+  if (imageMap && imageEntries && text.includes('[[IMG:')) {
+    return text.split(/(\[\[IMG:\d+\]\])/).map(part => {
+      const m = part.match(/^\[\[IMG:(\d+)\]\]$/);
+      if (m) {
+        const img = imageMap[parseInt(m[1])];
+        if (img && img.w && img.h) {
+          const rIdNum = imageEntries.length + 4;
+          const rId = `rId${rIdNum}`;
+          const maxEmu = 5943600;
+          let cx = img.w * 9525, cy = img.h * 9525;
+          if (cx > maxEmu) { cy = Math.round(cy * maxEmu / cx); cx = maxEmu; }
+          imageEntries.push({ rId, filename: `image${imageEntries.length + 1}.png`, data: img.data });
+          return buildImageRunXml(rId, cx, cy);
+        }
+        return `<w:r><w:t>[Image]</w:t></w:r>`;
+      }
+      return _buildMixedContentText(part);
+    }).join('');
+  }
+  return _buildMixedContentText(text);
+}
+
+function _buildMixedContentText(text) {
   if(!text)return'';
   text = cleanOrphanMarkers(text);
   
@@ -407,7 +471,7 @@ function extractMathRuns(text) {
 function buildFormattedTextRuns(text) {
   if(!text)return'';
   let result='';
-  const parts=text.split(/(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  const parts=text.split(/(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|~[^~]+~|\^[^^]+\^)/g);
   for(const part of parts){
     if(!part)continue;
     if(part.startsWith('***')&&part.endsWith('***')&&part.length>6)
@@ -416,6 +480,10 @@ function buildFormattedTextRuns(text) {
       result+=`<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${escapeXml(part.slice(2,-2))}</w:t></w:r>`;
     else if(part.startsWith('*')&&part.endsWith('*')&&part.length>2&&!part.startsWith('**'))
       result+=`<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${escapeXml(part.slice(1,-1))}</w:t></w:r>`;
+    else if(part.startsWith('~')&&part.endsWith('~')&&part.length>2)
+      result+=`<w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t xml:space="preserve">${escapeXml(part.slice(1,-1))}</w:t></w:r>`;
+    else if(part.startsWith('^')&&part.endsWith('^')&&part.length>2)
+      result+=`<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t xml:space="preserve">${escapeXml(part.slice(1,-1))}</w:t></w:r>`;
     else {
       let clean = part.replace(/\*\*/g, '').replace(/^\*\s*/g, '').replace(/\s*\*$/g, '');
       if(clean) result+=`<w:r><w:t xml:space="preserve">${escapeXml(clean)}</w:t></w:r>`;
@@ -429,7 +497,7 @@ function buildFormattedTextRuns(text) {
 const CONTENT_TYPES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`;
 const ROOT_RELS=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
 const DOC_RELS=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>`;
-const STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/><w:sz w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="36"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="100"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="30"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="160" w:after="80"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="26"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style></w:styles>`;
+const STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/><w:sz w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="36"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="100"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="30"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="160" w:after="80"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="26"/><w:color w:val="2F5496"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style></w:styles>`;
 const SETTINGS=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:mathPr><m:mathFont m:val="Cambria Math"/></m:mathPr><w:defaultTabStop w:val="720"/></w:settings>`;
 
 // Generate numbering.xml dynamically based on how many ordered lists exist
@@ -454,14 +522,14 @@ function buildNumberingXml(orderedListCount) {
   return xml;
 }
 
-function makeDocXml(body){return`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" mc:Ignorable="w14"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;}
+function makeDocXml(body){return`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" mc:Ignorable="w14"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;}
 
 // ── ZIP CREATOR ──
 
 function createZip(files){
   const enc=new TextEncoder(),parts=[],cd=[];let offset=0;
   for(const file of files){
-    const nb=enc.encode(file.name),cb=enc.encode(file.content),crc=crc32(cb);
+    const nb=enc.encode(file.name),cb=file.binary?base64ToBytes(file.content):enc.encode(file.content),crc=crc32(cb);
     const lh=new Uint8Array(30+nb.length),lv=new DataView(lh.buffer);
     lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint32(14,crc,true);
     lv.setUint32(18,cb.length,true);lv.setUint32(22,cb.length,true);lv.setUint16(26,nb.length,true);lh.set(nb,30);
@@ -491,26 +559,65 @@ function crc32(bytes) {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
+// ── IMAGE HELPERS ──
+
+function base64ToBytes(b64) {
+  const bs = atob(b64), out = new Uint8Array(bs.length);
+  for (let i = 0; i < bs.length; i++) out[i] = bs.charCodeAt(i);
+  return out;
+}
+
+function buildImageRunXml(rId, cx, cy) {
+  const id = parseInt(rId.replace('rId', '')) || 1;
+  // Namespaces (wp, a, pic) are declared on the root w:document element
+  return `<w:r><w:drawing>` +
+    `<wp:inline distT="0" distB="114300" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/>` +
+    `<wp:docPr id="${id}" name="${rId}"/>` +
+    `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="${rId}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `</pic:pic></a:graphicData></a:graphic>` +
+    `</wp:inline></w:drawing></w:r>`;
+}
+
 // ── PUBLIC API ──
 
-function convertChatGPTToDocx(markdownText) {
-  let blocks, bodyXml, orderedListCount;
+function convertChatGPTToDocx(markdownText, imageMap = {}) {
+  let blocks, bodyXml, orderedListCount, imageEntries;
   try {
     blocks = parseChatGPTMarkdown(markdownText);
-    ({ xml: bodyXml, orderedListCount } = buildDocumentXml(blocks));
+    ({ xml: bodyXml, orderedListCount, imageEntries } = buildDocumentXml(blocks, imageMap));
   } catch(e) {
-    console.error('Converter error during parsing/building:', e.message, e);
     throw e;
   }
+
+  // Build dynamic document relationships (add image entries after the 3 standard ones)
+  let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>`;
+  for (const e of imageEntries) {
+    docRels += `<Relationship Id="${e.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${e.filename}"/>`;
+  }
+  docRels += `</Relationships>`;
+
+  // Add PNG content type if images are present
+  const contentTypes = imageEntries.length > 0
+    ? CONTENT_TYPES.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>')
+    : CONTENT_TYPES;
+
   const files = [
-    {name:'[Content_Types].xml',content:CONTENT_TYPES},
+    {name:'[Content_Types].xml',content:contentTypes},
     {name:'_rels/.rels',content:ROOT_RELS},
-    {name:'word/_rels/document.xml.rels',content:DOC_RELS},
+    {name:'word/_rels/document.xml.rels',content:docRels},
     {name:'word/document.xml',content:makeDocXml(bodyXml)},
     {name:'word/styles.xml',content:STYLES},
     {name:'word/numbering.xml',content:buildNumberingXml(orderedListCount)},
     {name:'word/settings.xml',content:SETTINGS},
   ];
+  for (const e of imageEntries) {
+    files.push({ name: `word/media/${e.filename}`, content: e.data, binary: true });
+  }
   return new Blob([createZip(files)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 
