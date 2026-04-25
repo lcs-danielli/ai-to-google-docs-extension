@@ -21,8 +21,8 @@ A Chrome extension that adds an **Export to Docs** button directly on ChatGPT, G
 
 ## Demo
 
-<img width="373" height="85" alt="image" src="https://github.com/user-attachments/assets/b74e0e3f-415d-4437-b2ce-b34139d7f26e" />
-<img width="378" height="100" alt="image" src="https://github.com/user-attachments/assets/524279d8-e112-49fc-971b-be07bcd9ea67" />
+<img width="1280" height="800" alt="Gemini_Generated_Image_142ny5142ny5142n (1)" src="https://github.com/user-attachments/assets/d02f1e12-d628-4e99-afb4-e8f60b66a007" />
+<img width="1408" height="768" alt="Gemini_Generated_Image_7ohxy07ohxy07ohx" src="https://github.com/user-attachments/assets/89fb42aa-715e-4b8f-9d9f-177b65fe8234" />
 
 ## Installation (Development)
 
