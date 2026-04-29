@@ -671,27 +671,16 @@
   }
 
   function showSelectPanel(thisMessageEl) {
-    // Toggle: close if already open
     const existing = document.querySelector('.cgd-panel');
     if (existing) { existing.remove(); return; }
 
     const messages = getAllAIMessages();
     if (messages.length === 0) { showToast('❌ No AI responses found', true); return; }
 
-    const convKey = location.hostname + location.pathname;
-    chrome.storage.local.get(['lastExports', 'globalRecentDocs', 'customFolderName'], (storageData) => {
-      const raw = (storageData.lastExports || {})[convKey] || null;
-      const convHistory = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      const convIds = new Set(convHistory.map(e => e.fileId));
-      const globalExtra = (Array.isArray(storageData.globalRecentDocs) ? storageData.globalRecentDocs : [])
-        .filter(e => !convIds.has(e.fileId));
-      const exportHistory = [...convHistory, ...globalExtra].slice(0, 3);
-      const currentFolderName = storageData.customFolderName || 'AI Chat Exports';
-      _buildSelectPanel(messages, exportHistory, thisMessageEl, currentFolderName);
-    });
+    _buildSelectPanel(messages, thisMessageEl);
   }
 
-  function _buildSelectPanel(messages, exportHistory, thisMessageEl, currentFolderName = 'AI Chat Exports') {
+  function _buildSelectPanel(messages, thisMessageEl) {
     const platform = isGemini ? 'Gemini' : isClaude ? 'Claude' : 'ChatGPT';
     const dark = isDarkMode();
 
@@ -705,9 +694,8 @@
     // ── Header ──
     const header = document.createElement('div');
     header.className = 'cgd-panel-header';
-    header.innerHTML = `<span class="cgd-panel-title">Export Responses</span><button class="cgd-panel-close" title="Close">✕</button>`;
+    header.innerHTML = `<span class="cgd-panel-title">Export</span><button class="cgd-panel-close" title="Close">✕</button>`;
 
-    // Make panel draggable via header
     header.addEventListener('mousedown', (e) => {
       if (e.target.closest('.cgd-panel-close')) return;
       const startX = e.clientX, startY = e.clientY;
@@ -730,119 +718,33 @@
       e.preventDefault();
     });
 
-    // ── Destination selector ──
-    // "New Doc" always first; up to 3 previous exports shown as selectable pills
-    let destMode = 'new';
-    let selectedExport = null; // which export entry is active when destMode === 'append'
+    // ── Action row: Last / Full / Pick ──
+    const actionRow = document.createElement('div');
+    actionRow.className = 'cgd-action-row';
 
-    // ── Folder row ──
-    const folderRow = document.createElement('div');
-    folderRow.className = 'cgd-folder-row';
-    const folderLabel = document.createElement('span');
-    folderLabel.className = 'cgd-folder-label';
-    folderLabel.textContent = 'Save to';
-    const folderPickBtn = document.createElement('button');
-    folderPickBtn.className = 'cgd-folder-pick-btn';
-    const folderShort = currentFolderName.length > 22 ? currentFolderName.slice(0, 20) + '…' : currentFolderName;
-    folderPickBtn.textContent = folderShort + ' ▾';
-    folderRow.appendChild(folderLabel);
-    folderRow.appendChild(folderPickBtn);
+    const btnLast = document.createElement('button');
+    btnLast.className = 'cgd-action-btn';
+    btnLast.textContent = '↩ Last';
+    btnLast.title = 'Export last AI response';
 
-    // Inline folder dropdown (toggled on click)
-    const folderDropEl = document.createElement('div');
-    folderDropEl.className = 'cgd-folder-drop' + (dark ? ' cgd-dark' : '');
-    folderDropEl.style.display = 'none';
+    const btnFull = document.createElement('button');
+    btnFull.className = 'cgd-action-btn';
+    btnFull.textContent = '≡ Full';
+    btnFull.title = 'Export full conversation';
 
-    folderPickBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (folderDropEl.style.display !== 'none') { folderDropEl.style.display = 'none'; return; }
-      folderDropEl.innerHTML = `<div class="cgd-folder-drop-item cgd-folder-loading">Loading…</div>`;
-      folderDropEl.style.display = 'block';
-      chrome.runtime.sendMessage({ action: 'listFolders' }, (resp) => {
-        folderDropEl.innerHTML = '';
-        chrome.storage.local.get('customFolderId', (d) => {
-          const activeId = d.customFolderId || null;
-          const defItem = document.createElement('div');
-          defItem.className = 'cgd-folder-drop-item' + (!activeId ? ' cgd-folder-drop-active' : '');
-          defItem.textContent = (!activeId ? '✓ ' : '') + 'AI Chat Exports (default)';
-          defItem.addEventListener('click', (e) => {
-            e.stopPropagation();
-            chrome.storage.local.remove(['customFolderId', 'customFolderName']);
-            folderPickBtn.textContent = 'AI Chat Exports ▾';
-            folderDropEl.style.display = 'none';
-          });
-          folderDropEl.appendChild(defItem);
+    const btnPick = document.createElement('button');
+    btnPick.className = 'cgd-action-btn';
+    btnPick.textContent = '☑ Pick';
+    btnPick.title = 'Select specific responses';
 
-          if (!resp || !resp.success) {
-            const errItem = document.createElement('div');
-            errItem.className = 'cgd-folder-drop-item cgd-folder-loading';
-            errItem.textContent = resp?.error || 'Could not load folders';
-            folderDropEl.appendChild(errItem);
-            return;
-          }
-          for (const f of (resp.folders || [])) {
-            const item = document.createElement('div');
-            const isActive = f.id === activeId;
-            item.className = 'cgd-folder-drop-item' + (isActive ? ' cgd-folder-drop-active' : '');
-            item.textContent = (isActive ? '✓ ' : '') + f.name;
-            item.title = f.name;
-            item.addEventListener('click', (e) => {
-              e.stopPropagation();
-              chrome.storage.local.set({ customFolderId: f.id, customFolderName: f.name });
-              const n = f.name.length > 22 ? f.name.slice(0, 20) + '…' : f.name;
-              folderPickBtn.textContent = n + ' ▾';
-              folderDropEl.style.display = 'none';
-            });
-            folderDropEl.appendChild(item);
-          }
-          if (!resp.folders?.length) {
-            const empty = document.createElement('div');
-            empty.className = 'cgd-folder-drop-item cgd-folder-loading';
-            empty.textContent = 'No folders in Drive root';
-            folderDropEl.appendChild(empty);
-          }
-        });
-      });
-    });
+    actionRow.appendChild(btnLast);
+    actionRow.appendChild(btnFull);
+    actionRow.appendChild(btnPick);
 
-    const destRow = document.createElement('div');
-    destRow.className = 'cgd-dest-row';
-
-    const destNewBtn = document.createElement('button');
-    destNewBtn.className = 'cgd-dest-btn cgd-dest-active';
-    destNewBtn.textContent = '+ New Doc';
-    destRow.appendChild(destNewBtn);
-
-    const appendBtns = [];
-    for (const exp of exportHistory) {
-      if (!exp || !exp.fileId) continue;
-      const shortName = exp.fileName.length > 16 ? exp.fileName.slice(0, 14) + '…' : exp.fileName;
-      const btn = document.createElement('button');
-      btn.className = 'cgd-dest-btn';
-      btn.textContent = `→ ${shortName}`;
-      btn.title = `Add to: ${exp.fileName} · Double-click to open`;
-      const docUrl = exp.url || `https://docs.google.com/document/d/${exp.fileId}/edit`;
-
-      btn.addEventListener('click', () => {
-        destMode = 'append';
-        selectedExport = exp;
-        destNewBtn.classList.remove('cgd-dest-active');
-        appendBtns.forEach(b => b.classList.remove('cgd-dest-active'));
-        btn.classList.add('cgd-dest-active');
-        exportBtn.textContent = 'Append →';
-      });
-      btn.addEventListener('dblclick', (e) => { e.stopPropagation(); window.open(docUrl, '_blank'); });
-      appendBtns.push(btn);
-      destRow.appendChild(btn);
-    }
-
-    destNewBtn.addEventListener('click', () => {
-      destMode = 'new';
-      selectedExport = null;
-      destNewBtn.classList.add('cgd-dest-active');
-      appendBtns.forEach(b => b.classList.remove('cgd-dest-active'));
-      exportBtn.textContent = 'Export →';
-    });
+    // ── Pick area (collapsed by default) ──
+    const pickArea = document.createElement('div');
+    pickArea.className = 'cgd-pick-area';
+    pickArea.style.display = 'none';
 
     // ── Select all / none ──
     const controls = document.createElement('div');
@@ -868,7 +770,7 @@
 
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = thisIdx === -1 || i === thisIdx;
+      cb.checked = true;
       checkboxes.push(cb);
       cb.addEventListener('change', updateCount);
 
@@ -925,7 +827,7 @@
 
     const countLabel = document.createElement('span');
     countLabel.className = 'cgd-count-label';
-    countLabel.textContent = (thisIdx !== -1 ? 1 : messages.length) + ' selected';
+    countLabel.textContent = messages.length + ' selected';
 
     const exportBtn = document.createElement('button');
     exportBtn.className = 'cgd-export-sel-btn';
@@ -935,36 +837,16 @@
     footerMain.appendChild(exportBtn);
     footer.appendChild(footerMain);
 
-    // ── Dest row: wrap with scroll arrows if there are append options ──
-    let destMount = destRow;
-    if (appendBtns.length > 0) {
-      const destWrap = document.createElement('div');
-      destWrap.style.cssText = `display:flex;align-items:center;border-bottom:1px solid var(--p-divider);padding:0 10px;`;
-
-      const arrowBtn = (char, dir) => {
-        const b = document.createElement('button');
-        b.textContent = char;
-        b.style.cssText = `flex-shrink:0;background:none;border:none;width:20px;font-size:18px;line-height:1;color:var(--p-faint);cursor:pointer;padding:0;`;
-        b.addEventListener('click', (e) => { e.stopPropagation(); destRow.scrollBy({ left: dir * 110, behavior: 'smooth' }); });
-        return b;
-      };
-      destRow.style.borderBottom = 'none';
-      destWrap.appendChild(arrowBtn('‹', -1));
-      destWrap.appendChild(destRow);
-      destWrap.appendChild(arrowBtn('›', 1));
-      destMount = destWrap;
-    }
+    pickArea.appendChild(controls);
+    pickArea.appendChild(list);
+    pickArea.appendChild(footer);
 
     // ── Assemble ──
     panel.appendChild(header);
-    panel.appendChild(folderRow);
-    panel.appendChild(folderDropEl);
-    panel.appendChild(destMount);
-    panel.appendChild(controls);
-    panel.appendChild(list);
-    panel.appendChild(footer);
+    panel.appendChild(actionRow);
+    panel.appendChild(pickArea);
 
-    // ── Event listeners ──
+    // ── Shared logic ──
     function close() {
       darkWatcher.disconnect();
       document.removeEventListener('click', outsideClickHandler);
@@ -975,7 +857,6 @@
       if (!panel.contains(e.target)) close();
     }
 
-    // Track dark mode changes while panel is open
     const darkWatcher = new MutationObserver(() => {
       panel.classList.toggle('cgd-dark', isDarkMode());
     });
@@ -1008,62 +889,38 @@
       else showToast('❌ Could not extract content', true);
     }
 
-    function appendSelected() {
-      if (!selectedExport) { showToast('❌ Select a destination doc first', true); return; }
-      const selectedIndices = getSelectedIndices();
-      if (selectedIndices.length === 0) { showToast('❌ Nothing selected', true); return; }
-      close();
-      showToast('⏳ Appending to Doc...');
-      _resetImgCaptures();
-      const now = new Date();
-      const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-      const convTitle = getConversationTitle();
-      const sourceUrl = location.origin + location.pathname;
-      const sourceHeader = `${platform}${convTitle ? ' · ' + convTitle : ''} · ${dateStr}\n${sourceUrl}`;
-      const rawParts = selectedIndices.map(origIdx => {
-        const text = extractMarkdown(messages[origIdx]).trim();
-        return text ? `${platform} Response ${origIdx + 1}\n\n${text}` : '';
-      }).filter(Boolean);
-      const plainText = sourceHeader + '\n\n' + markdownToPlainText(rawParts.join('\n\n---\n\n'));
-      const docUrl = selectedExport.url || `https://docs.google.com/document/d/${selectedExport.fileId}/edit`;
-      chrome.runtime.sendMessage(
-        { action: 'appendToDoc', fileId: selectedExport.fileId, text: plainText },
-        (resp) => {
-          if (chrome.runtime.lastError) {
-            showToast('❌ Append failed: ' + chrome.runtime.lastError.message, true);
-            return;
-          }
-          if (resp && resp.success) {
-            showToast(
-              `✅ Added to "<b>${escHtml(selectedExport.fileName)}</b>"! <a href="${docUrl}" target="_blank" style="color:#fff;text-decoration:underline">Open ↗</a>`,
-              false, 5000
-            );
-          } else {
-            showToast('❌ Append failed: ' + (resp?.error || 'Unknown error'), true);
-          }
-        }
-      );
-    }
-
     header.querySelector('.cgd-panel-close').addEventListener('click', close);
+
+    btnLast.addEventListener('click', () => {
+      close();
+      const el = getLastAIMessage();
+      if (el) exportMessage(el); else showToast('❌ No AI response found', true);
+    });
+
+    btnFull.addEventListener('click', () => {
+      close();
+      exportFullConversation();
+    });
+
+    btnPick.addEventListener('click', () => {
+      const open = pickArea.style.display !== 'none';
+      pickArea.style.display = open ? 'none' : 'flex';
+      btnPick.classList.toggle('cgd-action-btn-active', !open);
+      if (!open) {
+        setTimeout(() => {
+          if (thisIdx !== -1 && rowEls[thisIdx]) rowEls[thisIdx].scrollIntoView({ block: 'nearest' });
+          else list.scrollTop = list.scrollHeight;
+        }, 30);
+      }
+    });
 
     controls.querySelector('#cgd-sa').addEventListener('click', () => { checkboxes.forEach(cb => cb.checked = true); updateCount(); });
     controls.querySelector('#cgd-sn').addEventListener('click', () => { checkboxes.forEach(cb => cb.checked = false); updateCount(); });
 
-    exportBtn.addEventListener('click', () => {
-      if (destMode === 'append' && selectedExport?.fileId) appendSelected();
-      else exportSelected();
-    });
+    exportBtn.addEventListener('click', exportSelected);
 
     document.body.appendChild(panel);
-    // Delay so the click that opened the panel doesn't immediately close it
     setTimeout(() => document.addEventListener('click', outsideClickHandler), 0);
-
-    if (thisIdx !== -1 && rowEls[thisIdx]) {
-      setTimeout(() => rowEls[thisIdx].scrollIntoView({ block: 'nearest' }), 50);
-    } else {
-      list.scrollTop = list.scrollHeight;
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════

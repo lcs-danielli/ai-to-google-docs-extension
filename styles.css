@@ -367,6 +367,43 @@
 }
 .cgd-doc-open-link:hover { background: var(--p-accent-bg); }
 
+/* ── Action row (Last / Full / Pick) ────────────────────────── */
+.cgd-action-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 9px;
+  border-bottom: 1px solid var(--p-divider);
+  flex-shrink: 0;
+}
+.cgd-action-btn {
+  flex: 1;
+  padding: 7px 4px;
+  background: var(--p-btn-bg);
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--p-sub);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.13s;
+  white-space: nowrap;
+}
+.cgd-action-btn:hover { background: var(--p-btn-hover); color: var(--p-text); }
+.cgd-action-btn-active {
+  background: var(--p-accent-bg);
+  border-color: var(--p-accent-bd);
+  color: var(--p-accent);
+}
+
+/* ── Pick area (expandable, shown as flex when open) ────────── */
+.cgd-pick-area {
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ── CSV button ──────────────────────────────────────────────── */
 .cgd-csv-btn {
   flex-shrink: 0;
