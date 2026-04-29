@@ -1,18 +1,28 @@
+// Sandboxed page — no chrome.* APIs. Communicates via postMessage.
 const PICKER_API_KEY = 'AIzaSyCGZjDDRW6e6ogByzjwduNYC3XiQVBEpjY';
+let _token = null;
+let _pickerReady = false;
+
+// Receive OAuth token from picker-host.js
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'TOKEN') {
+    _token = e.data.token;
+    if (_pickerReady) openPicker(_token);
+  }
+});
 
 function gapiLoaded() {
-  document.getElementById('status').textContent = 'Signing in…';
-  chrome.runtime.sendMessage({ action: 'getPickerToken' }, (resp) => {
-    if (chrome.runtime.lastError || !resp?.token) {
-      document.getElementById('status').textContent = 'Sign-in failed. Close and try again.';
-      return;
-    }
-    document.getElementById('status').textContent = 'Opening folder browser…';
-    gapi.load('picker', () => openPicker(resp.token));
+  gapi.load('picker', () => {
+    _pickerReady = true;
+    if (_token !== null) openPicker(_token);
   });
 }
 
 function openPicker(token) {
+  if (!token) {
+    document.getElementById('status').textContent = 'Sign-in failed. Close and try again.';
+    return;
+  }
   const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
     .setSelectFolderEnabled(true)
     .setMode(google.picker.DocsViewMode.LIST);
@@ -32,11 +42,12 @@ function openPicker(token) {
 function pickerCallback(data) {
   if (data.action === google.picker.Action.PICKED) {
     const folder = data.docs[0];
-    chrome.storage.local.set(
-      { customFolderId: folder.id, customFolderName: folder.name },
-      () => window.close()
-    );
+    window.parent.postMessage({
+      type: 'FOLDER_SELECTED',
+      folderId: folder.id,
+      folderName: folder.name
+    }, '*');
   } else if (data.action === google.picker.Action.CANCEL) {
-    window.close();
+    window.parent.postMessage({ type: 'PICKER_CANCEL' }, '*');
   }
 }

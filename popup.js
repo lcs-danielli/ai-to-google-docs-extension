@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Folder picker: open Google Picker popup ──
   folderBtn.addEventListener('click', () => {
     chrome.windows.create({
-      url: chrome.runtime.getURL('picker.html'),
+      url: chrome.runtime.getURL('picker-host.html'),
       type: 'popup',
       width: 640,
       height: 540
