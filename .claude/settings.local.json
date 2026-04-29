@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(ssh -T git@github.com)",
+      "Read(//Users/daniel/**)",
+      "Bash(gh auth *)",
+      "Bash(git push *)"
+    ]
+  }
+}
