@@ -2,17 +2,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  const headerSub     = document.getElementById('header-sub');
-  const mainEl        = document.getElementById('main');
-  const emptyEl       = document.getElementById('empty');
-  const statusEl      = document.getElementById('status');
-  const btnExport     = document.getElementById('btn-export');
-  const recentSection = document.getElementById('recent-section');
-  const recentList    = document.getElementById('recent-list');
-  const folderRow     = document.getElementById('folder-row');
-  const folderBtn     = document.getElementById('folder-btn');
-  const gearBtn       = document.getElementById('gear-btn');
-  const settingsPanel = document.getElementById('settings-panel');
+  const headerSub      = document.getElementById('header-sub');
+  const mainEl         = document.getElementById('main');
+  const emptyEl        = document.getElementById('empty');
+  const statusEl       = document.getElementById('status');
+  const btnExport      = document.getElementById('btn-export');
+  const recentSection  = document.getElementById('recent-section');
+  const recentList     = document.getElementById('recent-list');
+  const optDrive       = document.getElementById('opt-drive');
+  const optLocal       = document.getElementById('opt-local');
+  const driveDetail    = document.getElementById('drive-detail');
+  const changeFolderBtn = document.getElementById('change-folder');
+  const gearBtn        = document.getElementById('gear-btn');
+  const settingsPanel  = document.getElementById('settings-panel');
 
   let currentDest = 'drive';
   let currentMode = 'last';
@@ -23,15 +25,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentMode = d.defaultExportMode || 'last';
     applyDest();
     applyMode();
-    applyFolderName(d.customFolderName);
+    if (d.customFolderName) driveDetail.textContent = d.customFolderName;
   });
 
   function applyDest() {
-    document.querySelectorAll('.dest-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.dest === currentDest);
-    });
-    folderRow.style.display = currentDest === 'drive' ? 'flex' : 'none';
+    optDrive.classList.toggle('active', currentDest === 'drive');
+    optLocal.classList.toggle('active', currentDest === 'local');
     updateExportLabel();
+    updateRecent();
   }
 
   function applyMode() {
@@ -51,19 +52,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnExport.textContent = drive ? '☑ Pick & Export' : '☑ Pick & Save';
   }
 
-  function applyFolderName(name) {
-    if (!name) name = 'AI Chat Exports';
-    const short = name.length > 24 ? name.slice(0, 22) + '…' : name;
-    folderBtn.textContent = short + ' ▾';
-  }
-
-  // ── Destination toggle ──
-  document.querySelectorAll('.dest-btn').forEach(b => {
-    b.addEventListener('click', () => {
-      currentDest = b.dataset.dest;
+  // ── Destination selection ──
+  [optDrive, optLocal].forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      if (changeFolderBtn.contains(e.target)) return;
+      currentDest = opt.dataset.dest;
       chrome.storage.local.set({ exportDest: currentDest });
       applyDest();
     });
+  });
+
+  // ── Change folder (›) ──
+  changeFolderBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentDest = 'drive';
+    chrome.storage.local.set({ exportDest: 'drive' });
+    applyDest();
+    chrome.windows.create({
+      url: chrome.runtime.getURL('picker-host.html'),
+      type: 'popup', width: 640, height: 540
+    });
+    window.close();
   });
 
   // ── Mode tabs ──
@@ -75,22 +84,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // ── Gear / settings toggle ──
+  // ── Gear / settings ──
   gearBtn.addEventListener('click', () => {
     const open = settingsPanel.style.display !== 'none';
     settingsPanel.style.display = open ? 'none' : 'block';
-    gearBtn.classList.toggle('active', !open);
-  });
-
-  // ── Folder picker: open Google Picker popup ──
-  folderBtn.addEventListener('click', () => {
-    chrome.windows.create({
-      url: chrome.runtime.getURL('picker-host.html'),
-      type: 'popup',
-      width: 640,
-      height: 540
-    });
-    window.close();
+    gearBtn.classList.toggle('on', !open);
   });
 
   // ── Shortcuts ──
@@ -104,7 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.close();
   });
 
-  // ── Export button ──
+  // ── Export ──
   function setWorking() {
     btnExport.disabled = true;
     statusEl.textContent = 'Working…';
@@ -123,13 +121,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   btnExport.addEventListener('click', () => {
-    if (currentMode === 'last') send('exportLast');
+    if (currentMode === 'last')      send('exportLast');
     else if (currentMode === 'full') send('exportFull');
-    else send('openPanel');
+    else                             send('openPanel');
   });
 
-  // ── Recent exports ──
-  function loadRecent() {
+  // ── Recent exports (Drive mode only) ──
+  function updateRecent() {
+    if (currentDest !== 'drive') { recentSection.style.display = 'none'; return; }
     try {
       const { hostname, pathname } = new URL(tab.url);
       const convKey = hostname + pathname;
@@ -150,8 +149,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           a.href = exp.url || `https://docs.google.com/document/d/${exp.fileId}/edit`;
           a.target = '_blank';
           const name = exp.fileName || 'Untitled';
-          const shortName = name.length > 26 ? name.slice(0, 24) + '…' : name;
-          a.innerHTML = `<span class="recent-chip-icon">↩</span><span class="recent-chip-name">${shortName}</span><span class="recent-chip-arrow">↗</span>`;
+          const short = name.length > 26 ? name.slice(0, 24) + '…' : name;
+          a.innerHTML = `<span class="r-icon">↩</span><span class="r-name">${short}</span><span class="r-arrow">↗</span>`;
           a.title = name;
           recentList.appendChild(a);
         }
@@ -170,6 +169,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const count = resp.responseCount || 0;
     headerSub.textContent = `${resp.platform} · ${count} response${count !== 1 ? 's' : ''}`;
     mainEl.style.display = 'block';
-    loadRecent();
+    updateRecent();
   });
 });

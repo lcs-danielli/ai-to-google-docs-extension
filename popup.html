@@ -3,138 +3,180 @@
 <head>
   <meta charset="utf-8">
   <style>
+    :root {
+      --bg:        #fff;
+      --bg2:       #f8f9fa;
+      --border:    #f0f0f0;
+      --text:      #111;
+      --sub:       #444;
+      --muted:     #888;
+      --faint:     #ccc;
+      --blue:      #1a73e8;
+      --blue-bg:   #e8f0fe;
+      --blue-dark: #1558b0;
+      --btn-bg:    #f1f3f4;
+      --btn-hover: #e2e5e9;
+      --shadow:    0 1px 3px rgba(0,0,0,0.12);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:        #202124;
+        --bg2:       #2a2b2e;
+        --border:    rgba(255,255,255,0.1);
+        --text:      #e8eaed;
+        --sub:       #9aa0a6;
+        --muted:     #6c7177;
+        --faint:     #3c4043;
+        --blue:      #8ab4f8;
+        --blue-bg:   rgba(138,180,248,0.15);
+        --blue-dark: #6a9fe8;
+        --btn-bg:    rgba(255,255,255,0.08);
+        --btn-hover: rgba(255,255,255,0.14);
+        --shadow:    0 1px 3px rgba(0,0,0,0.4);
+      }
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 248px;
+      width: 252px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #fff; color: #111;
+      background: var(--bg); color: var(--text);
       -webkit-font-smoothing: antialiased;
     }
 
     /* ── Header ── */
     .header {
       display: flex; align-items: center; gap: 9px;
-      padding: 10px 12px 9px;
+      padding: 11px 12px 10px;
     }
-    .header img { width: 22px; height: 22px; flex-shrink: 0; }
+    .header img { width: 24px; height: 24px; flex-shrink: 0; }
     .header-text { flex: 1; min-width: 0; }
-    .header-title { font-size: 12px; font-weight: 600; color: #111; }
-    .header-sub   { font-size: 10px; color: #bbb; margin-top: 1px; }
+    .header-title { font-size: 12px; font-weight: 600; color: var(--text); }
+    .header-sub   { font-size: 10px; color: var(--muted); margin-top: 1px; }
     .gear-btn {
       background: none; border: none; cursor: pointer;
-      color: #ccc; font-size: 15px; padding: 3px 5px;
-      border-radius: 5px; line-height: 1; transition: all 0.13s;
-      flex-shrink: 0;
+      color: var(--faint); font-size: 15px;
+      padding: 3px 5px; border-radius: 5px; line-height: 1;
+      transition: all 0.13s; flex-shrink: 0;
     }
-    .gear-btn:hover, .gear-btn.active { color: #555; background: #f1f3f4; }
+    .gear-btn:hover, .gear-btn.on { color: var(--sub); background: var(--btn-bg); }
 
-    hr { border: none; border-top: 1px solid #f0f0f0; }
+    hr { border: none; border-top: 1px solid var(--border); }
 
-    /* ── Destination row ── */
-    .dest-row {
-      display: flex; gap: 6px; padding: 8px 12px 7px;
+    /* ── Save-to section ── */
+    .save-section { padding: 8px 10px 7px; border-bottom: 1px solid var(--border); }
+    .section-label {
+      font-size: 10px; font-weight: 600; color: var(--faint);
+      letter-spacing: 0.5px; text-transform: uppercase;
+      padding: 0 2px; margin-bottom: 5px;
     }
-    .dest-btn {
-      flex: 1; padding: 5px 6px;
-      background: #f1f3f4; border: 1.5px solid transparent;
-      border-radius: 7px; font-size: 11px; font-weight: 500; color: #555;
-      cursor: pointer; transition: all 0.13s; text-align: center;
+    .save-opt {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 8px;
+      cursor: pointer; transition: background 0.12s;
+      margin-bottom: 2px; user-select: none;
     }
-    .dest-btn.active { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
-    .dest-btn:hover:not(.active) { background: #e2e5e9; }
+    .save-opt:last-child { margin-bottom: 0; }
+    .save-opt:hover { background: var(--bg2); }
+    .save-opt.active { background: var(--blue-bg); }
+    .save-radio {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid var(--faint); flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .save-opt.active .save-radio {
+      border-color: var(--blue);
+      box-shadow: inset 0 0 0 3px var(--blue-bg), inset 0 0 0 8px var(--blue);
+    }
+    .save-icon { font-size: 14px; flex-shrink: 0; line-height: 1; }
+    .save-info { flex: 1; min-width: 0; }
+    .save-title  { font-size: 11px; font-weight: 500; color: var(--sub); display: block; }
+    .save-detail {
+      font-size: 10px; color: var(--muted); display: block;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
+    }
+    .save-opt.active .save-title  { color: var(--blue); }
+    .save-opt.active .save-detail { color: var(--blue); opacity: 0.75; }
+    .save-change {
+      background: none; border: none; color: var(--muted);
+      font-size: 16px; font-weight: 300;
+      cursor: pointer; padding: 1px 5px; border-radius: 5px;
+      flex-shrink: 0; transition: all 0.13s; line-height: 1;
+    }
+    .save-change:hover { background: var(--blue-bg); color: var(--blue); }
 
-    /* ── Recent exports ── */
-    .recent-section { padding: 0 12px 6px; }
-    .recent-label {
-      font-size: 10px; font-weight: 600; color: #c8c8c8;
-      letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;
-    }
+    /* ── Recent ── */
+    .recent-section { padding: 7px 12px 5px; border-bottom: 1px solid var(--border); }
     .recent-list {
-      display: flex; flex-direction: column; gap: 2px;
-      max-height: 76px; overflow-y: auto;
-      scrollbar-width: thin; scrollbar-color: #e5e7eb transparent;
+      display: flex; flex-direction: column; gap: 1px;
+      max-height: 72px; overflow-y: auto; scrollbar-width: none;
     }
-    .recent-list::-webkit-scrollbar { width: 3px; }
-    .recent-list::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+    .recent-list::-webkit-scrollbar { display: none; }
     .recent-chip {
-      display: flex; align-items: center; gap: 5px;
-      padding: 4px 7px; background: #f8f9fa; border-radius: 6px;
-      font-size: 11px; color: #555; text-decoration: none;
-      transition: background 0.13s; overflow: hidden; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 6px; border-radius: 6px;
+      font-size: 11px; color: var(--sub);
+      text-decoration: none; transition: background 0.12s;
+      white-space: nowrap; overflow: hidden;
     }
-    .recent-chip:hover { background: #e8f0fe; color: #1a73e8; }
-    .recent-chip-icon { font-size: 10px; flex-shrink: 0; color: #bbb; }
-    .recent-chip:hover .recent-chip-icon { color: #1a73e8; }
-    .recent-chip-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
-    .recent-chip-arrow { font-size: 9px; color: #ccc; flex-shrink: 0; }
-    .recent-chip:hover .recent-chip-arrow { color: #1a73e8; }
+    .recent-chip:hover { background: var(--blue-bg); color: var(--blue); }
+    .r-icon  { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    .r-name  { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .r-arrow { font-size: 9px; color: var(--faint); flex-shrink: 0; }
+    .recent-chip:hover .r-icon,
+    .recent-chip:hover .r-arrow { color: var(--blue); }
 
-    /* ── Mode tabs ── */
-    .mode-row {
-      display: flex; gap: 4px; padding: 7px 12px 6px;
+    /* ── Mode strip (segmented control) ── */
+    .mode-section { padding: 8px 12px 6px; }
+    .mode-strip {
+      display: flex;
+      background: var(--btn-bg); border-radius: 9px; padding: 3px; gap: 0;
     }
     .mode-tab {
-      flex: 1; padding: 6px 2px;
-      background: #f1f3f4; border: 1.5px solid transparent;
-      border-radius: 7px; font-size: 11px; font-weight: 500; color: #555;
-      cursor: pointer; transition: all 0.13s; text-align: center; white-space: nowrap;
+      flex: 1; padding: 6px 2px; text-align: center;
+      background: none; border: none; border-radius: 7px;
+      font-size: 11px; font-weight: 500; color: var(--muted);
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
-    .mode-tab.active { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
-    .mode-tab:hover:not(.active) { background: #e2e5e9; }
-
-    /* ── Folder row ── */
-    .folder-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 2px 12px 8px; gap: 6px;
+    .mode-tab.active {
+      background: var(--bg); color: var(--blue);
+      box-shadow: var(--shadow);
     }
-    .folder-label { font-size: 11px; color: #999; flex-shrink: 0; }
-    .folder-btn {
-      font-size: 11px; border: 1px solid #e5e5e5; border-radius: 6px;
-      padding: 3px 8px; background: #fff; color: #555;
-      cursor: pointer; max-width: 170px; overflow: hidden;
-      white-space: nowrap; text-overflow: ellipsis;
-      transition: border-color 0.13s, color 0.13s;
-    }
-    .folder-btn:hover { border-color: #1a73e8; color: #1a73e8; }
 
     /* ── Export button ── */
-    .export-wrap { padding: 2px 12px 10px; }
+    .export-wrap { padding: 4px 12px 10px; }
     .btn-export {
-      display: block; width: 100%; padding: 9px 12px;
-      background: #1a73e8; color: #fff;
-      border: none; border-radius: 8px;
-      font-size: 13px; font-weight: 500;
-      cursor: pointer; text-align: center; transition: background 0.15s;
+      display: block; width: 100%; padding: 10px;
+      background: var(--blue); color: #fff;
+      border: none; border-radius: 9px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; text-align: center;
+      transition: all 0.15s; letter-spacing: -0.1px;
     }
-    .btn-export:hover:not(:disabled) { background: #1558b0; }
+    .btn-export:hover:not(:disabled) { background: var(--blue-dark); }
     .btn-export:disabled { opacity: 0.4; cursor: default; }
 
-    .status { font-size: 11px; color: #999; text-align: center; min-height: 14px; padding: 0 12px 4px; }
+    .status {
+      font-size: 11px; color: var(--muted); text-align: center;
+      min-height: 14px; padding: 0 12px 4px;
+    }
 
     /* ── Empty state ── */
-    .empty { padding: 22px 12px 18px; font-size: 12px; color: #aaa; text-align: center; line-height: 1.6; }
+    .empty { padding: 24px 12px 20px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; }
 
     /* ── Shortcut hint ── */
     .shortcut-hint {
-      text-align: center; font-size: 10px; color: #ccc;
+      text-align: center; font-size: 10px; color: var(--faint);
       padding: 5px 12px 8px; letter-spacing: 0.2px;
     }
-    .shortcut-hint a { color: #ccc; text-decoration: none; }
-    .shortcut-hint a:hover { color: #999; text-decoration: underline; }
+    .shortcut-hint a { color: var(--faint); text-decoration: none; }
+    .shortcut-hint a:hover { color: var(--muted); text-decoration: underline; }
 
-    /* ── Settings panel ── */
-    .settings-panel {
-      padding: 8px 12px 10px; border-top: 1px solid #f0f0f0; display: none;
-    }
-    .settings-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 3px 0;
-    }
-    .settings-label { font-size: 11px; color: #999; }
-    .settings-link {
-      font-size: 11px; color: #1a73e8;
-      background: none; border: none; cursor: pointer; padding: 0;
-    }
+    /* ── Settings ── */
+    .settings-panel { padding: 8px 12px 10px; border-top: 1px solid var(--border); display: none; }
+    .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; }
+    .settings-label { font-size: 11px; color: var(--muted); }
+    .settings-link { font-size: 11px; color: var(--blue); background: none; border: none; cursor: pointer; padding: 0; }
     .settings-link:hover { text-decoration: underline; }
   </style>
 </head>
@@ -153,36 +195,55 @@
 
 <!-- Supported page -->
 <div id="main" style="display:none">
-  <div class="dest-row">
-    <button class="dest-btn active" data-dest="drive">☁ Drive</button>
-    <button class="dest-btn" data-dest="local">💾 Local</button>
+
+  <!-- Save to -->
+  <div class="save-section">
+    <div class="section-label">Save to</div>
+    <div class="save-opt active" id="opt-drive" data-dest="drive">
+      <span class="save-radio"></span>
+      <span class="save-icon">☁️</span>
+      <div class="save-info">
+        <span class="save-title">Google Drive</span>
+        <span class="save-detail" id="drive-detail">AI Chat Exports</span>
+      </div>
+      <button class="save-change" id="change-folder" title="Change folder">›</button>
+    </div>
+    <div class="save-opt" id="opt-local" data-dest="local">
+      <span class="save-radio"></span>
+      <span class="save-icon">💾</span>
+      <div class="save-info">
+        <span class="save-title">Local .docx</span>
+        <span class="save-detail">Save as file</span>
+      </div>
+    </div>
   </div>
 
+  <!-- Recent exports (Drive only) -->
   <div id="recent-section" class="recent-section" style="display:none">
-    <div class="recent-label">Recent</div>
+    <div class="section-label">Recent</div>
     <div id="recent-list" class="recent-list"></div>
   </div>
 
   <hr>
 
-  <div class="mode-row">
-    <button class="mode-tab" data-mode="last">↩ Last</button>
-    <button class="mode-tab" data-mode="full">≡ Full</button>
-    <button class="mode-tab" data-mode="select">☑ Pick</button>
+  <!-- Mode (segmented control) -->
+  <div class="mode-section">
+    <div class="mode-strip">
+      <button class="mode-tab" data-mode="last">↩ Last</button>
+      <button class="mode-tab" data-mode="full">≡ Full</button>
+      <button class="mode-tab" data-mode="select">☑ Pick</button>
+    </div>
   </div>
 
-  <div id="folder-row" class="folder-row">
-    <span class="folder-label">Folder</span>
-    <button id="folder-btn" class="folder-btn">AI Chat Exports ▾</button>
-  </div>
-
+  <!-- Export -->
   <div class="export-wrap">
     <button id="btn-export" class="btn-export">Export →</button>
   </div>
   <div id="status" class="status"></div>
+
 </div>
 
-<!-- Not on a supported page -->
+<!-- Not on supported page -->
 <div id="empty" style="display:none">
   <div class="empty">Open ChatGPT, Gemini,<br>or Claude to export.</div>
 </div>
