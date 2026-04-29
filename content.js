@@ -14,6 +14,9 @@
   const isChatGPT = location.hostname.includes('chatgpt.com') || location.hostname.includes('chat.openai.com');
   const isClaude = location.hostname.includes('claude.ai');
 
+  let exportDest = 'drive';
+  chrome.storage.local.get('exportDest', d => { exportDest = d.exportDest || 'drive'; });
+
   function isDarkMode() {
     const root = document.documentElement;
     const body = document.body;
@@ -419,59 +422,74 @@
       ? `${convTitle}${suffix}.docx`
       : `${platform}_Export${suffix}_${timestamp}.docx`;
 
-    showToast('⏳ Uploading to Google Drive...');
+    if (!chrome.runtime || !chrome.runtime.sendMessage) {
+      showToast('❌ Extension reloaded. Please refresh this page.', true);
+      return;
+    }
+    const base64 = await blobToBase64(blob);
 
-    try {
-      if (!chrome.runtime || !chrome.runtime.sendMessage) {
-        throw new Error('Extension reloaded. Please refresh this page and try again.');
-      }
-      const base64 = await blobToBase64(blob);
-      const result = await new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          { action: 'uploadToDrive', docxBase64: base64, filename: filename },
-          (response) => {
-            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-            else if (response && response.success) resolve(response);
-            else reject(new Error(response ? response.error : 'Unknown error'));
-          }
-        );
-      });
-
-      showToast(`✅ Created "<b>${escHtml(result.fileName)}</b>" in Google Drive! Opening...`, false, 5000);
-      setTimeout(() => window.open(result.url, '_blank'), 500);
-      // Remember this export for this conversation (keep last 3)
-      const convKey = location.hostname + location.pathname;
-      chrome.storage.local.get('lastExports', (d) => {
-        const allExports = d.lastExports || {};
-        const history = Array.isArray(allExports[convKey]) ? allExports[convKey] : (allExports[convKey] ? [allExports[convKey]] : []);
-        const newEntry = { fileName: result.fileName, url: result.url, fileId: result.fileId };
-        // Remove duplicate (same fileId) if exists, then prepend
-        const filtered = history.filter(e => e.fileId !== newEntry.fileId);
-        allExports[convKey] = [newEntry, ...filtered].slice(0, 3);
-        chrome.storage.local.set({ lastExports: allExports });
-        // Also update global recent docs (cross-platform append target)
-        chrome.storage.local.get('globalRecentDocs', (gd) => {
-          const global = Array.isArray(gd.globalRecentDocs) ? gd.globalRecentDocs : [];
-          const gFiltered = global.filter(e => e.fileId !== newEntry.fileId);
-          chrome.storage.local.set({ globalRecentDocs: [newEntry, ...gFiltered].slice(0, 5) });
+    if (exportDest === 'local') {
+      showToast('⏳ Preparing download...');
+      try {
+        await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage(
+            { action: 'downloadLocal', docxBase64: base64, filename },
+            (resp) => {
+              if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+              else if (resp?.success) resolve();
+              else reject(new Error(resp?.error || 'Download failed'));
+            }
+          );
         });
-      });
-
-    } catch(e) {
-      if (e.message.includes('OAuth2') || e.message.includes('client_id') || e.message.includes('invalid_client') || e.message.includes('sign-in')) {
-        showToast('⚠️ Google Drive not set up yet. Downloading .docx instead.<br><small>See SETUP_GUIDE.md to enable one-click export.</small>', true, 6000);
-      } else {
-        showToast('⚠️ Drive upload failed. Downloading .docx instead.', true);
+        showToast('✅ Saved as .docx!', false, 4000);
+      } catch(e) {
+        showToast('❌ Save failed: ' + e.message, true);
       }
+    } else {
+      showToast('⏳ Uploading to Google Drive...');
+      try {
+        const result = await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage(
+            { action: 'uploadToDrive', docxBase64: base64, filename },
+            (response) => {
+              if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+              else if (response && response.success) resolve(response);
+              else reject(new Error(response ? response.error : 'Unknown error'));
+            }
+          );
+        });
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+        showToast(`✅ Created "<b>${escHtml(result.fileName)}</b>" in Google Drive! Opening...`, false, 5000);
+        setTimeout(() => window.open(result.url, '_blank'), 500);
+        const convKey = location.hostname + location.pathname;
+        chrome.storage.local.get('lastExports', (d) => {
+          const allExports = d.lastExports || {};
+          const history = Array.isArray(allExports[convKey]) ? allExports[convKey] : (allExports[convKey] ? [allExports[convKey]] : []);
+          const newEntry = { fileName: result.fileName, url: result.url, fileId: result.fileId };
+          const filtered = history.filter(e => e.fileId !== newEntry.fileId);
+          allExports[convKey] = [newEntry, ...filtered].slice(0, 3);
+          chrome.storage.local.set({ lastExports: allExports });
+          chrome.storage.local.get('globalRecentDocs', (gd) => {
+            const global = Array.isArray(gd.globalRecentDocs) ? gd.globalRecentDocs : [];
+            const gFiltered = global.filter(e => e.fileId !== newEntry.fileId);
+            chrome.storage.local.set({ globalRecentDocs: [newEntry, ...gFiltered].slice(0, 5) });
+          });
+        });
 
-      setTimeout(() => window.open('https://drive.google.com/drive/my-drive', '_blank'), 800);
+      } catch(e) {
+        if (e.message.includes('OAuth2') || e.message.includes('client_id') || e.message.includes('invalid_client') || e.message.includes('sign-in')) {
+          showToast('⚠️ Google Drive not set up yet. Downloading .docx instead.<br><small>See SETUP_GUIDE.md to enable one-click export.</small>', true, 6000);
+        } else {
+          showToast('⚠️ Drive upload failed. Downloading .docx instead.', true);
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     }
   }
 
@@ -576,7 +594,8 @@
   function handleExportClick(e, messageEl) {
     e.preventDefault();
     e.stopPropagation();
-    chrome.storage.local.get('defaultExportMode', (data) => {
+    chrome.storage.local.get(['defaultExportMode', 'exportDest'], (data) => {
+      exportDest = data.exportDest || 'drive';
       const mode = data.defaultExportMode || 'select';
       if (mode === 'last') {
         const el = getLastAIMessage();
@@ -687,6 +706,29 @@
     const header = document.createElement('div');
     header.className = 'cgd-panel-header';
     header.innerHTML = `<span class="cgd-panel-title">Export Responses</span><button class="cgd-panel-close" title="Close">✕</button>`;
+
+    // Make panel draggable via header
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.cgd-panel-close')) return;
+      const startX = e.clientX, startY = e.clientY;
+      const rect = panel.getBoundingClientRect();
+      const origLeft = rect.left, origTop = rect.top;
+      document.removeEventListener('click', outsideClickHandler);
+      function onMove(me) {
+        panel.style.left = (origLeft + me.clientX - startX) + 'px';
+        panel.style.top  = (origTop  + me.clientY - startY) + 'px';
+        panel.style.right = 'auto';
+        panel.style.transform = 'none';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        setTimeout(() => document.addEventListener('click', outsideClickHandler), 0);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
 
     // ── Destination selector ──
     // "New Doc" always first; up to 3 previous exports shown as selectable pills
@@ -1259,6 +1301,7 @@
       return;
     }
     if (request.action === 'exportLast') {
+      if (request.dest) exportDest = request.dest;
       sendResponse({ ok: true });
       const el = getLastAIMessage();
       if (!el) { showToast('❌ No AI response found on this page', true); return; }
@@ -1266,18 +1309,21 @@
       return;
     }
     if (request.action === 'exportFull') {
+      if (request.dest) exportDest = request.dest;
       sendResponse({ ok: true });
       exportFullConversation();
       return;
     }
     if (request.action === 'openPanel') {
+      if (request.dest) exportDest = request.dest;
       sendResponse({ ok: true });
       showSelectPanel(null);
       return;
     }
     if (request.action === 'triggerDefault') {
       sendResponse({ ok: true });
-      chrome.storage.local.get('defaultExportMode', (data) => {
+      chrome.storage.local.get(['defaultExportMode', 'exportDest'], (data) => {
+        exportDest = data.exportDest || 'drive';
         const mode = data.defaultExportMode || 'select';
         if (mode === 'last') {
           const el = getLastAIMessage();

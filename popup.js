@@ -2,180 +2,174 @@ document.addEventListener('DOMContentLoaded', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  const headerSub  = document.getElementById('header-sub');
-  const mainEl     = document.getElementById('main');
-  const emptyEl    = document.getElementById('empty');
-  const statusEl   = document.getElementById('status');
-  const btnExport  = document.getElementById('btn-export');
-  const btnLast    = document.getElementById('btn-last');
-  const btnAll     = document.getElementById('btn-all');
-  const lastRow    = document.getElementById('last-row');
-  const lastNameEl = document.getElementById('last-name');
-  const modeSelect = document.getElementById('mode-select');
+  const headerSub     = document.getElementById('header-sub');
+  const mainEl        = document.getElementById('main');
+  const emptyEl       = document.getElementById('empty');
+  const statusEl      = document.getElementById('status');
+  const btnExport     = document.getElementById('btn-export');
+  const recentSection = document.getElementById('recent-section');
+  const recentList    = document.getElementById('recent-list');
+  const folderRow     = document.getElementById('folder-row');
+  const folderBtn     = document.getElementById('folder-btn');
+  const gearBtn       = document.getElementById('gear-btn');
+  const settingsPanel = document.getElementById('settings-panel');
 
-  function setWorking() {
-    statusEl.textContent = 'Working…';
-    btnExport.disabled = btnLast.disabled = btnAll.disabled = true;
+  let currentDest = 'drive';
+  let currentMode = 'last';
+
+  // ── Load saved settings ──
+  chrome.storage.local.get(['exportDest', 'defaultExportMode', 'customFolderName'], (d) => {
+    currentDest = d.exportDest || 'drive';
+    currentMode = d.defaultExportMode || 'last';
+    applyDest();
+    applyMode();
+    applyFolderName(d.customFolderName);
+  });
+
+  function applyDest() {
+    document.querySelectorAll('.dest-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.dest === currentDest);
+    });
+    folderRow.style.display = currentDest === 'drive' ? 'flex' : 'none';
+    updateExportLabel();
   }
-  function resetButtons() {
-    btnExport.disabled = btnLast.disabled = btnAll.disabled = false;
-    statusEl.textContent = '';
+
+  function applyMode() {
+    document.querySelectorAll('.mode-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === currentMode);
+    });
+    updateExportLabel();
+  }
+
+  function updateExportLabel() {
+    const drive = currentDest === 'drive';
+    if (currentMode === 'last')
+      btnExport.textContent = drive ? '↩ Export Last' : '↩ Save Last';
+    else if (currentMode === 'full')
+      btnExport.textContent = drive ? '≡ Export Full' : '≡ Save Full';
+    else
+      btnExport.textContent = drive ? '☑ Pick & Export' : '☑ Pick & Save';
+  }
+
+  function applyFolderName(name) {
+    if (!name) name = 'AI Chat Exports';
+    const short = name.length > 24 ? name.slice(0, 22) + '…' : name;
+    folderBtn.textContent = short + ' ▾';
+  }
+
+  // ── Destination toggle ──
+  document.querySelectorAll('.dest-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      currentDest = b.dataset.dest;
+      chrome.storage.local.set({ exportDest: currentDest });
+      applyDest();
+    });
+  });
+
+  // ── Mode tabs ──
+  document.querySelectorAll('.mode-tab').forEach(b => {
+    b.addEventListener('click', () => {
+      currentMode = b.dataset.mode;
+      chrome.storage.local.set({ defaultExportMode: currentMode });
+      applyMode();
+    });
+  });
+
+  // ── Gear / settings toggle ──
+  gearBtn.addEventListener('click', () => {
+    const open = settingsPanel.style.display !== 'none';
+    settingsPanel.style.display = open ? 'none' : 'block';
+    gearBtn.classList.toggle('active', !open);
+  });
+
+  // ── Folder picker: open Google Picker popup ──
+  folderBtn.addEventListener('click', () => {
+    chrome.windows.create({
+      url: chrome.runtime.getURL('picker.html'),
+      type: 'popup',
+      width: 640,
+      height: 540
+    });
+    window.close();
+  });
+
+  // ── Shortcuts ──
+  document.getElementById('shortcut-customize').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    window.close();
+  });
+  document.getElementById('customize-shortcut').addEventListener('click', () => {
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    window.close();
+  });
+
+  // ── Export button ──
+  function setWorking() {
+    btnExport.disabled = true;
+    statusEl.textContent = 'Working…';
   }
 
   function send(action) {
     setWorking();
-    chrome.tabs.sendMessage(tab.id, { action }, () => {
+    chrome.tabs.sendMessage(tab.id, { action, dest: currentDest }, () => {
       if (chrome.runtime.lastError) {
         statusEl.textContent = 'Error — try refreshing the page';
-        resetButtons();
+        btnExport.disabled = false;
         return;
       }
       setTimeout(() => window.close(), 400);
     });
   }
 
-  // Update primary button label to match the default mode
-  function syncExportButton(mode) {
-    if (mode === 'last')      btnExport.textContent = 'Export Last Response';
-    else if (mode === 'full') btnExport.textContent = 'Export Full Conversation';
-    else                      btnExport.textContent = 'Export to Docs ▾';
-  }
-
-  // Load stored default mode
-  chrome.storage.local.get('defaultExportMode', (data) => {
-    const mode = data.defaultExportMode || 'select';
-    modeSelect.value = mode;
-    syncExportButton(mode);
+  btnExport.addEventListener('click', () => {
+    if (currentMode === 'last') send('exportLast');
+    else if (currentMode === 'full') send('exportFull');
+    else send('openPanel');
   });
 
-  modeSelect.addEventListener('change', () => {
-    const mode = modeSelect.value;
-    chrome.storage.local.set({ defaultExportMode: mode });
-    syncExportButton(mode);
-  });
+  // ── Recent exports ──
+  function loadRecent() {
+    try {
+      const { hostname, pathname } = new URL(tab.url);
+      const convKey = hostname + pathname;
+      chrome.storage.local.get(['lastExports', 'globalRecentDocs'], (d) => {
+        const raw = (d.lastExports || {})[convKey] || null;
+        const convHistory = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        const convIds = new Set(convHistory.map(e => e.fileId));
+        const globalExtra = (Array.isArray(d.globalRecentDocs) ? d.globalRecentDocs : [])
+          .filter(e => !convIds.has(e.fileId));
+        const all = [...convHistory, ...globalExtra].slice(0, 5);
 
-  // ── Folder picker ──
-  const folderBtn      = document.getElementById('folder-btn');
-  const folderDropdown = document.getElementById('folder-dropdown');
-
-  // Show current folder name
-  chrome.storage.local.get('customFolderName', (d) => {
-    if (d.customFolderName) {
-      const n = d.customFolderName;
-      folderBtn.textContent = (n.length > 20 ? n.slice(0, 18) + '…' : n) + ' ▾';
-    }
-  });
-
-  folderBtn.addEventListener('click', () => {
-    if (folderDropdown.style.display !== 'none') {
-      folderDropdown.style.display = 'none';
-      return;
-    }
-    folderDropdown.innerHTML = '<div style="padding:7px 12px;font-size:11px;color:#999">Loading…</div>';
-    folderDropdown.style.display = 'block';
-
-    chrome.runtime.sendMessage({ action: 'listFolders' }, (resp) => {
-      folderDropdown.innerHTML = '';
-      chrome.storage.local.get('customFolderId', (d) => {
-        const activeFolderId = d.customFolderId || null;
-
-        // Default option
-        const defItem = document.createElement('div');
-        defItem.className = 'folder-item folder-item-default' + (!activeFolderId ? ' folder-active' : '');
-        defItem.textContent = (!activeFolderId ? '✓ ' : '') + 'AI Chat Exports (default)';
-        defItem.addEventListener('click', () => {
-          chrome.storage.local.remove(['customFolderId', 'customFolderName']);
-          folderBtn.textContent = 'AI Chat Exports ▾';
-          folderDropdown.style.display = 'none';
-        });
-        folderDropdown.appendChild(defItem);
-
-        if (!resp || !resp.success) {
-          const err = document.createElement('div');
-          err.style.cssText = 'padding:5px 12px;font-size:11px;color:#999';
-          err.textContent = 'Sign in to see folders';
-          folderDropdown.appendChild(err);
-          return;
-        }
-
-        for (const f of resp.folders) {
-          const item = document.createElement('div');
-          const isActive = f.id === activeFolderId;
-          item.className = 'folder-item' + (isActive ? ' folder-active' : '');
-          item.textContent = (isActive ? '✓ ' : '') + f.name;
-          item.title = f.name;
-          item.addEventListener('click', () => {
-            chrome.storage.local.set({ customFolderId: f.id, customFolderName: f.name });
-            const n = f.name;
-            folderBtn.textContent = (n.length > 20 ? n.slice(0, 18) + '…' : n) + ' ▾';
-            folderDropdown.style.display = 'none';
-          });
-          folderDropdown.appendChild(item);
-        }
-
-        if (resp.folders.length === 0) {
-          const empty = document.createElement('div');
-          empty.style.cssText = 'padding:5px 12px;font-size:11px;color:#999';
-          empty.textContent = 'No folders in Drive root';
-          folderDropdown.appendChild(empty);
+        if (all.length === 0) { recentSection.style.display = 'none'; return; }
+        recentSection.style.display = 'block';
+        recentList.innerHTML = '';
+        for (const exp of all) {
+          const a = document.createElement('a');
+          a.className = 'recent-chip';
+          a.href = exp.url || `https://docs.google.com/document/d/${exp.fileId}/edit`;
+          a.target = '_blank';
+          const name = exp.fileName || 'Untitled';
+          const shortName = name.length > 26 ? name.slice(0, 24) + '…' : name;
+          a.innerHTML = `<span class="recent-chip-icon">↩</span><span class="recent-chip-name">${shortName}</span><span class="recent-chip-arrow">↗</span>`;
+          a.title = name;
+          recentList.appendChild(a);
         }
       });
-    });
-  });
-
-  // Close dropdown when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!folderBtn.contains(e.target) && !folderDropdown.contains(e.target)) {
-      folderDropdown.style.display = 'none';
+    } catch (_) {
+      recentSection.style.display = 'none';
     }
-  });
+  }
 
-  // Shortcut customize link
-  document.getElementById('shortcut-customize')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
-    window.close();
-  });
-
-  // Ask content script for platform + response count
+  // ── Platform detection ──
   chrome.tabs.sendMessage(tab.id, { action: 'getPlatform' }, (resp) => {
     if (chrome.runtime.lastError || !resp?.platform) {
       emptyEl.style.display = 'block';
       return;
     }
-
     const count = resp.responseCount || 0;
-    const countLabel = count === 1 ? '1 response' : `${count} responses`;
-    headerSub.textContent = `on ${resp.platform} · ${countLabel}`;
+    headerSub.textContent = `${resp.platform} · ${count} response${count !== 1 ? 's' : ''}`;
     mainEl.style.display = 'block';
-
-    // Load last export shortcut for this conversation
-    try {
-      const { hostname, pathname } = new URL(tab.url);
-      const convKey = hostname + pathname;
-      chrome.storage.local.get('lastExports', (d) => {
-        const raw = (d.lastExports || {})[convKey];
-        const last = Array.isArray(raw) ? raw[0] : raw;
-        if (last) {
-          const display = last.fileName.length > 24
-            ? last.fileName.slice(0, 22) + '…'
-            : last.fileName;
-          lastNameEl.textContent = display;
-          lastRow.href = last.url || `https://docs.google.com/document/d/${last.fileId}/edit`;
-          lastRow.style.display = 'flex';
-        }
-      });
-    } catch (_) {}
+    loadRecent();
   });
-
-  // Primary button: action matches current default mode
-  btnExport.addEventListener('click', () => {
-    const mode = modeSelect.value;
-    if      (mode === 'last') send('exportLast');
-    else if (mode === 'full') send('exportFull');
-    else                      send('openPanel');
-  });
-
-  btnLast.addEventListener('click', () => send('exportLast'));
-  btnAll.addEventListener('click',  () => send('exportFull'));
 });

@@ -5,8 +5,12 @@
   "description": "One-click export of ChatGPT, Claude, and Gemini responses into Google Docs with math, tables, code, and images preserved.",
   "permissions": [
     "identity",
-    "storage"
+    "storage",
+    "downloads"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' https://apis.google.com; object-src 'self'"
+  },
   "host_permissions": [
     "https://www.googleapis.com/*",
     "https://docs.googleapis.com/*"

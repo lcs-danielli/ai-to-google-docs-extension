@@ -38,6 +38,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(() => sendResponse({ success: false }));
     return true;
   }
+
+  if (request.action === 'getPickerToken') {
+    getAuthToken(true)
+      .then(token => sendResponse({ token }))
+      .catch(() => sendResponse({ token: null }));
+    return true;
+  }
+
+  if (request.action === 'downloadLocal') {
+    const { docxBase64, filename } = request;
+    const url = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,' + docxBase64;
+    chrome.downloads.download({ url, filename, saveAs: true }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true });
+      }
+    });
+    return true;
+  }
 });
 
 // ── Keyboard shortcut: forward to active tab's content script ──
