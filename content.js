@@ -939,12 +939,12 @@
     let destMount = destRow;
     if (appendBtns.length > 0) {
       const destWrap = document.createElement('div');
-      destWrap.style.cssText = `display:flex;align-items:center;border-bottom:1px solid ${dark?'rgba(255,255,255,0.08)':'#eee'};padding:0 10px;`;
+      destWrap.style.cssText = `display:flex;align-items:center;border-bottom:1px solid var(--p-divider);padding:0 10px;`;
 
       const arrowBtn = (char, dir) => {
         const b = document.createElement('button');
         b.textContent = char;
-        b.style.cssText = `flex-shrink:0;background:none;border:none;width:20px;font-size:18px;line-height:1;color:${dark?'#5f6368':'#bbb'};cursor:pointer;padding:0;`;
+        b.style.cssText = `flex-shrink:0;background:none;border:none;width:20px;font-size:18px;line-height:1;color:var(--p-faint);cursor:pointer;padding:0;`;
         b.addEventListener('click', (e) => { e.stopPropagation(); destRow.scrollBy({ left: dir * 110, behavior: 'smooth' }); });
         return b;
       };
@@ -966,6 +966,7 @@
 
     // ── Event listeners ──
     function close() {
+      darkWatcher.disconnect();
       document.removeEventListener('click', outsideClickHandler);
       panel.remove();
     }
@@ -973,6 +974,13 @@
     function outsideClickHandler(e) {
       if (!panel.contains(e.target)) close();
     }
+
+    // Track dark mode changes while panel is open
+    const darkWatcher = new MutationObserver(() => {
+      panel.classList.toggle('cgd-dark', isDarkMode());
+    });
+    darkWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme', 'data-color-mode', 'style'] });
+    darkWatcher.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
 
     function updateCount() {
       const n = checkboxes.filter(cb => cb.checked).length;
