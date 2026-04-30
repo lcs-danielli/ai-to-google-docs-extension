@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Chat Exporter for Google Docs",
-  "version": "3.9.0",
+  "version": "3.9.1",
   "description": "One-click export of ChatGPT, Claude, and Gemini responses into Google Docs with math, tables, code, and images preserved.",
   "permissions": [
     "identity",
@@ -19,7 +19,7 @@
     "<all_urls>"
   ],
   "oauth2": {
-    "client_id": "39131322719-3fr4tc7gi8jc3b3mavi6npvatai37b90.apps.googleusercontent.com",
+    "client_id": "39131322719-ndpbenl2i02127q2kovno76vd6b9ap3j.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/drive.file"
     ]
