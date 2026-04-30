@@ -9,8 +9,10 @@
     "downloads"
   ],
   "sandbox": {
-    "pages": ["picker.html"],
-    "content_security_policy": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' https://apis.google.com https://ssl.gstatic.com; object-src 'self'"
+    "pages": ["picker.html"]
+  },
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' https://apis.google.com https://ssl.gstatic.com; object-src 'self'"
   },
   "host_permissions": [
     "https://www.googleapis.com/*",
