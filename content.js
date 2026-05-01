@@ -828,11 +828,14 @@
     }
     applyDestUI();
 
-    btnDrive.addEventListener('click', () => {
+    btnDrive.addEventListener('click', async () => {
       exportDest = 'drive';
       chrome.storage.local.set({ exportDest: 'drive' });
       applyDestUI();
       exportBtn.textContent = 'Export to Docs →';
+      // Open folder picker to change destination folder
+      const result = await _pickDriveFolder();
+      if (result === 'done') _refreshDriveBtn(btnDrive);
     });
 
     btnLocal.addEventListener('click', () => {
@@ -905,15 +908,16 @@
 
       const numDiv = document.createElement('div');
       numDiv.className = 'cgd-msg-num';
-      numDiv.textContent = `Response ${i + 1}  ↗`;
 
-      const prevDiv = document.createElement('div');
-      prevDiv.className = 'cgd-msg-preview';
-      prevDiv.textContent = preview;
-      textWrap.appendChild(numDiv);
-      textWrap.appendChild(prevDiv);
+      const numText = document.createElement('span');
+      numText.textContent = `Response ${i + 1}`;
 
-      textWrap.addEventListener('click', (e) => {
+      // Small jump button — separate from label so it doesn't block checkbox toggle
+      const jumpBtn = document.createElement('button');
+      jumpBtn.textContent = '↗';
+      jumpBtn.title = 'Jump to this response';
+      jumpBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:inherit;padding:0 2px;opacity:0.6;';
+      jumpBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -921,6 +925,14 @@
         msgEl.style.borderRadius = '6px';
         setTimeout(() => { msgEl.style.outline = ''; msgEl.style.borderRadius = ''; }, 1800);
       });
+      numDiv.appendChild(numText);
+      numDiv.appendChild(jumpBtn);
+
+      const prevDiv = document.createElement('div');
+      prevDiv.className = 'cgd-msg-preview';
+      prevDiv.textContent = preview;
+      textWrap.appendChild(numDiv);
+      textWrap.appendChild(prevDiv);
 
       row.appendChild(cb);
       row.appendChild(textWrap);
@@ -1003,12 +1015,6 @@
       const selectedIndices = getSelectedIndices();
       if (selectedIndices.length === 0) return;
 
-      if (exportDest === 'drive') {
-        const result = await _pickDriveFolder();
-        if (result !== 'done') return;
-        _refreshDriveBtn(btnDrive);
-      }
-
       // Panel stays open — user can pick again for another export
       exportBtn.disabled = true;
       exportBtn.textContent = 'Exporting…';
@@ -1033,23 +1039,13 @@
 
     header.querySelector('.cgd-panel-close').addEventListener('click', close);
 
-    btnLast.addEventListener('click', async () => {
-      if (exportDest === 'drive') {
-        const result = await _pickDriveFolder();
-        if (result !== 'done') return;
-        _refreshDriveBtn(btnDrive);
-      }
+    btnLast.addEventListener('click', () => {
       close();
       const el = getLastAIMessage();
       if (el) exportMessage(el); else showToast('❌ No AI response found', true);
     });
 
-    btnFull.addEventListener('click', async () => {
-      if (exportDest === 'drive') {
-        const result = await _pickDriveFolder();
-        if (result !== 'done') return;
-        _refreshDriveBtn(btnDrive);
-      }
+    btnFull.addEventListener('click', () => {
       close();
       exportFullConversation();
     });
