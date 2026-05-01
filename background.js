@@ -61,7 +61,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'openPickerWindow') {
     chrome.windows.create(
-      { url: chrome.runtime.getURL('picker-host.html'), type: 'popup', width: 640, height: 540 },
+      { url: chrome.runtime.getURL('picker-host.html'), type: 'popup', width: 420, height: 440 },
       () => sendResponse({ ok: true })
     );
     return true;

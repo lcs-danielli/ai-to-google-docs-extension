@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyDest();
     chrome.windows.create({
       url: chrome.runtime.getURL('picker-host.html'),
-      type: 'popup', width: 640, height: 540
+      type: 'popup', width: 420, height: 440
     });
     window.close();
   });
