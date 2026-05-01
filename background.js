@@ -102,9 +102,9 @@ async function listDriveFolders() {
   catch (e) { return { success: false, error: 'Not signed in' }; }
   if (!token) return { success: false, error: 'Not signed in' };
 
-  const q = encodeURIComponent("mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false");
+  const q = encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false");
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&orderBy=name&pageSize=50`,
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&orderBy=name&pageSize=100`,
     { headers: { 'Authorization': 'Bearer ' + token } }
   );
   if (!res.ok) return { success: false, error: 'Drive API error' };
